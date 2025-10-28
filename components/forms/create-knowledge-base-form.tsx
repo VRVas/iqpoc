@@ -111,7 +111,7 @@ export function CreateKnowledgeBaseForm({
           {
             kind: 'azureOpenAI',
             azureOpenAIParameters: {
-              resourceUri: process.env.NEXT_PUBLIC_AZURE_OPENAI_ENDPOINT || '',
+              resourceUri: process.env.NEXT_PUBLIC_FOUNDRY_ENDPOINT || '',
               deploymentId: data.modelDeployment,
               modelName: data.modelDeployment,
             },

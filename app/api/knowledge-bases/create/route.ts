@@ -15,11 +15,11 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json()
 
-    // Inject Azure OpenAI API key server-side when using key-based auth
+    // Inject Foundry API key server-side when using key-based auth
     if (body.models && Array.isArray(body.models)) {
       body.models.forEach((model: any) => {
         if (model.kind === 'azureOpenAI' && model.azureOpenAIParameters) {
-          model.azureOpenAIParameters.apiKey = process.env.AZURE_OPENAI_API_KEY
+          model.azureOpenAIParameters.apiKey = process.env.FOUNDRY_API_KEY
           delete model.azureOpenAIParameters.authIdentity
         }
       })

@@ -120,7 +120,7 @@ export function EditAgentForm({
         models: [{
           kind: 'azureOpenAI',
           azureOpenAIParameters: {
-            resourceUri: process.env.NEXT_PUBLIC_AZURE_OPENAI_ENDPOINT || '',
+            resourceUri: process.env.NEXT_PUBLIC_FOUNDRY_ENDPOINT || '',
             deploymentId: data.model || 'gpt-4o-mini',
             modelName: data.model || 'gpt-4o-mini'
           }

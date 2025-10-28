@@ -143,8 +143,8 @@ function QuickCreateKnowledgeSourcePageContent() {
   }
 
   const buildSourceSpecificPayload = () => {
-    const aoaiEndpoint = process.env.NEXT_PUBLIC_STANDALONE_AOAI_ENDPOINT || ''
-    const aoaiKey = process.env.NEXT_PUBLIC_STANDALONE_AOAI_KEY || ''
+    const aoaiEndpoint = process.env.NEXT_PUBLIC_FOUNDRY_ENDPOINT || ''
+    const aoaiKey = process.env.FOUNDRY_API_KEY || ''
 
     switch (config.sourceType) {
       case 'azureBlob':

@@ -66,7 +66,7 @@ This script will:
 | `AZURE_SEARCH_ENDPOINT` | `https://fsunavala-canary.search.windows.net` |
 | `AZURE_SEARCH_API_KEY` | Your search API key |
 | `AZURE_SEARCH_API_VERSION` | `2025-11-01-preview` |
-| `NEXT_PUBLIC_AZURE_OPENAI_ENDPOINT` | `https://fsunavala-openai-swecen.openai.azure.com` |
+| `NEXT_PUBLIC_AZURE_OPENAI_ENDPOINT` | `https://fsunavala-2228-resource.openai.azure.com` |
 | `AZURE_OPENAI_API_KEY` | Your OpenAI API key |
 | `NEXT_PUBLIC_STANDALONE_AOAI_ENDPOINT` | `https://fsunavala-standalone.openai.azure.com` |
 | `NEXT_PUBLIC_STANDALONE_AOAI_KEY` | Your standalone OpenAI key |

@@ -9,11 +9,11 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
 
     // Add the API key to the model configuration server-side
-    // Azure AI Search requires the API key for OpenAI model access
+    // Azure AI Search requires the API key for Foundry model access
     if (body.models && body.models.length > 0) {
       body.models.forEach((model: any) => {
         if (model.kind === 'azureOpenAI' && model.azureOpenAIParameters) {
-          model.azureOpenAIParameters.apiKey = process.env.AZURE_OPENAI_API_KEY;
+          model.azureOpenAIParameters.apiKey = process.env.FOUNDRY_API_KEY;
           // Remove authIdentity when using API key
           delete model.azureOpenAIParameters.authIdentity;
         }

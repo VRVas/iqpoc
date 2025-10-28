@@ -131,7 +131,7 @@ export function EditKnowledgeBaseForm({
   const buildPayload = (data: CreateKnowledgeBaseFormData): KnowledgeBaseData => {
     const knowledgeSourcesPayload = selectedSources.map((name) => ({ name }))
     const existingModel = knowledgeBase.models?.[0]?.azureOpenAIParameters || (knowledgeBase.models?.[0] as any)?.azureAIParameters
-    const resourceUri = existingModel?.resourceUri || process.env.NEXT_PUBLIC_AZURE_OPENAI_ENDPOINT || ''
+    const resourceUri = existingModel?.resourceUri || process.env.NEXT_PUBLIC_FOUNDRY_ENDPOINT || ''
 
     return {
       name: knowledgeBase.name,
