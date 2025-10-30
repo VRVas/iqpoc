@@ -1,0 +1,8 @@
+CloudMax Platform
+
+Key Features:
+- Auto-scaling compute resources
+- Managed database services (SQL, NoSQL)
+- Built-in AI/ML capabilities
+- Enterprise-grade security
+- 99.99% uptime SLA
