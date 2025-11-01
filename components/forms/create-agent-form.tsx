@@ -54,6 +54,14 @@ export function CreateAgentForm({
   const [showAdvanced, setShowAdvanced] = React.useState(false)
   const { toast } = useToast()
 
+  // Check if any selected sources are "web" kind
+  const hasWebSource = React.useMemo(() => {
+    return selectedSources.some(sourceName => {
+      const source = knowledgeSources.find(s => s.name === sourceName)
+      return source?.kind?.toLowerCase() === 'web'
+    })
+  }, [selectedSources, knowledgeSources])
+
   const form = useForm<z.infer<typeof createAgentSchema>>({
     resolver: zodResolver(createAgentSchema),
     defaultValues: {
@@ -77,6 +85,21 @@ export function CreateAgentForm({
   const watchedOutputModality = watch('outputModality')
   
   const watchedModel = watch('model')
+
+  // Enforce web source constraints
+  React.useEffect(() => {
+    if (hasWebSource) {
+      // Web sources require Answer Synthesis mode
+      if (watchedOutputModality !== 'answerSynthesis') {
+        setValue('outputModality', 'answerSynthesis')
+        toast({
+          type: 'warning',
+          title: 'Output mode changed',
+          description: 'Web sources require Answer Synthesis mode.'
+        })
+      }
+    }
+  }, [hasWebSource, watchedOutputModality, setValue, toast])
 
   const handleFormSubmit = async (data: z.infer<typeof createAgentSchema>) => {
     try {
@@ -105,12 +128,8 @@ export function CreateAgentForm({
           maxSubQueries: showAdvanced && data.maxSubQueries !== 5 ? data.maxSubQueries : null,
           rerankerThreshold: showAdvanced && data.rerankerThreshold !== 2.1 ? data.rerankerThreshold : null
         })),
-        outputConfiguration: {
-          modality: data.outputModality,
-          answerInstructions: data.answerInstructions || null,
-          attemptFastPath: false,
-          includeActivity: data.includeActivity || null
-        },
+        outputMode: data.outputModality,
+        answerInstructions: data.answerInstructions || null,
         requestLimits: null,
         encryptionKey: null
       }
@@ -306,6 +325,7 @@ export function CreateAgentForm({
                     setValue('outputModality', value as 'extractiveData' | 'answerSynthesis')
                     trigger('outputModality')
                   }}
+                  disabled={hasWebSource}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Select output mode" />
@@ -327,7 +347,11 @@ export function CreateAgentForm({
                 </Select>
               </FormControl>
               <FormDescription>
-                Choose how the agent processes and returns information from your knowledge sources
+                {hasWebSource ? (
+                  <span className="text-status-warning">⚠️ Web sources require Answer Synthesis mode</span>
+                ) : (
+                  'Choose how the agent processes and returns information from your knowledge sources'
+                )}
               </FormDescription>
               <FormMessage />
             </FormField>

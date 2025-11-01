@@ -32,8 +32,10 @@ type KnowledgeAgent = {
   model?: string
   sources: string[]
   status?: string
+  description?: string
   outputConfiguration?: { modality?: string; answerInstructions?: string }
   outputMode?: 'answerSynthesis' | 'extractiveData'
+  answerInstructions?: string  // Can be at root level in API response
   retrievalReasoningEffort?: { kind: 'minimal' | 'low' | 'medium' | 'high' }
   retrievalInstructions?: string
   knowledgeSources?: Array<{
@@ -70,6 +72,15 @@ type Reference = {
   toolName?: string
   serverURL?: string
   content?: string
+  searchSensitivityLabelInfo?: {
+    displayName: string
+    sensitivityLabelId: string
+    tooltip: string
+    priority: number
+    color: string
+    isEncrypted: boolean
+  }
+  webUrl?: string
 }
 
 type Activity = {
@@ -83,6 +94,17 @@ type Activity = {
   count?: number
   searchIndexArguments?: any
   azureBlobArguments?: any
+  remoteSharePointArguments?: {
+    search?: string
+    filterExpressionAddOn?: string | null
+  }
+  webArguments?: {
+    search?: string
+    language?: string | null
+    market?: string | null
+    count?: number | null
+    freshness?: string | null
+  }
 }
 
 interface KBPlaygroundViewProps {
@@ -112,6 +134,8 @@ export function KBPlaygroundView({ preselectedAgent }: KBPlaygroundViewProps) {
     outputMode?: 'answerSynthesis' | 'extractiveData'
     reasoningEffort?: 'minimal' | 'low' | 'medium' | 'high'
     globalHeaders?: Record<string, string>
+    answerInstructions?: string
+    retrievalInstructions?: string
     knowledgeSourceParams: Array<{
       knowledgeSourceName: string
       kind: string
@@ -126,6 +150,8 @@ export function KBPlaygroundView({ preselectedAgent }: KBPlaygroundViewProps) {
     outputMode: 'answerSynthesis',
     reasoningEffort: 'minimal',
     globalHeaders: {},
+    answerInstructions: '',
+    retrievalInstructions: '',
     knowledgeSourceParams: []
   })
 
@@ -175,6 +201,7 @@ export function KBPlaygroundView({ preselectedAgent }: KBPlaygroundViewProps) {
           description: agent.description,
           outputConfiguration: agent.outputConfiguration,
           outputMode: agent.outputMode,
+          answerInstructions: agent.answerInstructions,
           retrievalReasoningEffort: agent.retrievalReasoningEffort,
           retrievalInstructions: agent.retrievalInstructions,
             // Enrich knowledge sources with actual kind values from API
@@ -212,6 +239,8 @@ export function KBPlaygroundView({ preselectedAgent }: KBPlaygroundViewProps) {
             outputMode: outputMode,
             reasoningEffort: reasoningEffort,
             globalHeaders: {},
+            answerInstructions: agentToSelect.answerInstructions || agentToSelect.outputConfiguration?.answerInstructions || '',
+            retrievalInstructions: agentToSelect.retrievalInstructions || '',
             knowledgeSourceParams: []
           })
           
@@ -247,6 +276,9 @@ export function KBPlaygroundView({ preselectedAgent }: KBPlaygroundViewProps) {
         setRuntimeSettings({ // Apply knowledge base defaults when switching agents
           outputMode: outputMode,
           reasoningEffort: reasoningEffort,
+          globalHeaders: {},
+          answerInstructions: foundAgent.answerInstructions || foundAgent.outputConfiguration?.answerInstructions || '',
+          retrievalInstructions: foundAgent.retrievalInstructions || '',
           knowledgeSourceParams: []
         })
       }
@@ -1126,22 +1158,83 @@ function MessageBubble({ message, agent, showCostEstimates }: { message: Message
                                 </span>
                               </p>
 
-                              {/* Show snippet if available */}
-                              {ref.sourceData?.snippet && (
-                                <div className="mt-3 pt-3 border-t border-stroke-divider w-full">
-                                  <div className="flex items-center gap-2 mb-2">
-                                    <div className="text-[10px] font-medium text-fg-muted uppercase tracking-wide">
-                                      Source snippet
-                                    </div>
-                                    <div className="flex-1 h-px bg-stroke-divider"></div>
-                                  </div>
-                                  <div className="text-xs text-fg-default bg-bg-default/30 border border-stroke-divider rounded p-4 max-h-64 overflow-y-auto w-full">
-                                    <div className="leading-relaxed text-fg-muted break-words">
-                                      {cleanTextSnippet(ref.sourceData.snippet)}
-                                    </div>
-                                  </div>
+                              {/* Sensitivity label chip for remote SharePoint */}
+                              {ref.type === 'remoteSharePoint' && ref.searchSensitivityLabelInfo && (
+                                <div className="mt-2 flex items-center gap-2">
+                                  <span 
+                                    className="inline-flex items-center gap-1.5 px-2 py-1 rounded-full text-[10px] font-medium"
+                                    style={{ 
+                                      backgroundColor: `${ref.searchSensitivityLabelInfo.color}20`,
+                                      color: ref.searchSensitivityLabelInfo.color,
+                                      borderWidth: '1px',
+                                      borderStyle: 'solid',
+                                      borderColor: `${ref.searchSensitivityLabelInfo.color}40`
+                                    }}
+                                    title={ref.searchSensitivityLabelInfo.tooltip}
+                                  >
+                                    {ref.searchSensitivityLabelInfo.isEncrypted && (
+                                      <svg width="10" height="10" viewBox="0 0 16 16" fill="currentColor">
+                                        <path d="M8 1C6.34 1 5 2.34 5 4v2H4c-.55 0-1 .45-1 1v6c0 .55.45 1 1 1h8c.55 0 1-.45 1-1V7c0-.55-.45-1-1-1h-1V4c0-1.66-1.34-3-3-3zm0 1c1.11 0 2 .89 2 2v2H6V4c0-1.11.89-2 2-2z"/>
+                                      </svg>
+                                    )}
+                                    {ref.searchSensitivityLabelInfo.displayName}
+                                  </span>
                                 </div>
                               )}
+
+                              {/* Show snippet or web link */}
+                              {(() => {
+                                // Support multiple sourceData formats:
+                                // 1. sourceData.snippet (blob, OneLake)
+                                // 2. sourceData.extracts[].text (remoteSharePoint, indexed sources)
+                                // 3. sourceData.url + title (web sources - show as hyperlink)
+                                
+                                // For web sources, show title as hyperlink
+                                if (ref.type === 'web' && ref.sourceData?.url) {
+                                  const webTitle = ref.sourceData.title || ref.sourceData.url
+                                  const webUrl = ref.sourceData.url
+                                  
+                                  return (
+                                    <div className="mt-3 pt-3 border-t border-stroke-divider w-full">
+                                      <a 
+                                        href={webUrl} 
+                                        target="_blank" 
+                                        rel="noopener noreferrer"
+                                        className="text-xs text-accent hover:text-accent/80 hover:underline break-all"
+                                      >
+                                        {webTitle}
+                                      </a>
+                                    </div>
+                                  )
+                                }
+                                
+                                // For other sources, show snippet/extracts
+                                const snippet = ref.sourceData?.snippet
+                                const extracts = ref.sourceData?.extracts
+                                const extractText = extracts && Array.isArray(extracts) && extracts.length > 0
+                                  ? extracts.map(e => e.text).join('\n\n')
+                                  : null
+                                
+                                const displayText = snippet || extractText
+                                
+                                if (!displayText) return null
+                                
+                                return (
+                                  <div className="mt-3 pt-3 border-t border-stroke-divider w-full">
+                                    <div className="flex items-center gap-2 mb-2">
+                                      <div className="text-[10px] font-medium text-fg-muted uppercase tracking-wide">
+                                        Source snippet
+                                      </div>
+                                      <div className="flex-1 h-px bg-stroke-divider"></div>
+                                    </div>
+                                    <div className="text-xs text-fg-default bg-bg-default/30 border border-stroke-divider rounded p-4 max-h-64 overflow-y-auto w-full">
+                                      <div className="leading-relaxed text-fg-muted break-words">
+                                        {cleanTextSnippet(displayText)}
+                                      </div>
+                                    </div>
+                                  </div>
+                                )
+                              })()}
                             </div>
                           )
                         })}
@@ -1156,10 +1249,19 @@ function MessageBubble({ message, agent, showCostEstimates }: { message: Message
                         <div className="space-y-2">
                           <h6 className="text-xs font-medium text-fg-muted uppercase tracking-wide">Sources Queried</h6>
                           <div className="flex flex-wrap gap-2">
-                            {message.activity.filter(act => act.type === 'searchIndex' || act.type === 'azureBlob').map((activity) => {
-                              const sourceKind = activity.type === 'searchIndex' ? 'searchIndex' : 'azureBlob'
+                            {message.activity.filter(act => 
+                              act.type === 'searchIndex' || 
+                              act.type === 'azureBlob' || 
+                              act.type === 'remoteSharePoint' || 
+                              act.type === 'web'
+                            ).map((activity) => {
+                              const sourceKind = activity.type
                               const sourceName = activity.knowledgeSourceName || 'Unknown Source'
-                              const query = activity.searchIndexArguments?.search || activity.azureBlobArguments?.search
+                              const query = 
+                                activity.searchIndexArguments?.search || 
+                                activity.azureBlobArguments?.search ||
+                                activity.remoteSharePointArguments?.search ||
+                                activity.webArguments?.search
                               const resultCount = activity.count !== undefined ? activity.count : '?'
                               const duration = activity.elapsedMs ? `${activity.elapsedMs}ms` : ''
 
@@ -1203,8 +1305,14 @@ function MessageBubble({ message, agent, showCostEstimates }: { message: Message
                               // Some activity objects may have toolName/description, but not all. Use optional chaining and fallback.
                               const label = act.knowledgeSourceName || (act as any).toolName || act.type || 'Step';
                               const details: string[] = [];
+                              
+                              // Add search query based on activity type
                               if (act.searchIndexArguments?.search) details.push(`Query: "${act.searchIndexArguments.search}"`);
                               if (act.azureBlobArguments?.search) details.push(`Query: "${act.azureBlobArguments.search}"`);
+                              if (act.remoteSharePointArguments?.search) details.push(`Query: "${act.remoteSharePointArguments.search}"`);
+                              if (act.webArguments?.search) details.push(`Query: "${act.webArguments.search}"`);
+                              
+                              // Add other details
                               if ((act as any).toolName) details.push(`Tool: ${(act as any).toolName}`);
                               if ((act as any).description) details.push((act as any).description);
                               if (act.count !== undefined) details.push(`${act.count} results`);
@@ -1237,7 +1345,12 @@ function MessageBubble({ message, agent, showCostEstimates }: { message: Message
                           // Get unique sources with counts
                           const sourcesMap = new Map<string, number>()
                           message.activity
-                            .filter(act => act.type === 'searchIndex' || act.type === 'azureBlob')
+                            .filter(act => 
+                              act.type === 'searchIndex' || 
+                              act.type === 'azureBlob' || 
+                              act.type === 'remoteSharePoint' || 
+                              act.type === 'web'
+                            )
                             .forEach(act => {
                               const name = act.knowledgeSourceName || 'Unknown'
                               const count = act.count || 0
@@ -1257,7 +1370,10 @@ function MessageBubble({ message, agent, showCostEstimates }: { message: Message
 
                           // Count semantic queries (searches performed)
                           const semanticQueries = message.activity.filter(act =>
-                            act.type === 'searchIndex' || act.type === 'azureBlob'
+                            act.type === 'searchIndex' || 
+                            act.type === 'azureBlob' || 
+                            act.type === 'remoteSharePoint' || 
+                            act.type === 'web'
                           ).length
 
                           // Azure AI Search Pricing (Standard tier, after free tier)

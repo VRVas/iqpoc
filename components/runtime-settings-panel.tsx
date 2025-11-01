@@ -31,6 +31,8 @@ interface RuntimeSettings {
   outputMode?: 'answerSynthesis' | 'extractiveData'
   reasoningEffort?: 'minimal' | 'low' | 'medium' | 'high'
   globalHeaders?: Record<string, string>
+  answerInstructions?: string
+  retrievalInstructions?: string
 }
 
 type KnowledgeSource = {
@@ -349,6 +351,44 @@ export function RuntimeSettingsPanel({
             Controls retrieval reasoning complexity
           </p>
         </div>
+
+        {/* Retrieval Instructions */}
+        <div className="space-y-2">
+          <label htmlFor="retrieval-instructions" className="text-xs font-medium text-fg-default">
+            Retrieval Instructions
+          </label>
+          <textarea
+            id="retrieval-instructions"
+            value={settings.retrievalInstructions || ''}
+            onChange={(e) => onSettingsChange({ ...settings, retrievalInstructions: e.target.value })}
+            placeholder="Optional instructions to guide the retrieval process..."
+            rows={3}
+            className="w-full px-3 py-2 text-xs rounded-md border border-stroke-divider bg-bg-card focus:outline-none focus:ring-2 focus:ring-accent resize-none"
+          />
+          <p className="text-xs text-fg-muted">
+            Guide how sources are retrieved (configured on the knowledge base)
+          </p>
+        </div>
+
+        {/* Answer Instructions (only shown for Answer Synthesis mode) */}
+        {settings.outputMode === 'answerSynthesis' && (
+          <div className="space-y-2">
+            <label htmlFor="answer-instructions" className="text-xs font-medium text-fg-default">
+              Answer Instructions
+            </label>
+            <textarea
+              id="answer-instructions"
+              value={settings.answerInstructions || ''}
+              onChange={(e) => onSettingsChange({ ...settings, answerInstructions: e.target.value })}
+              placeholder="Optional instructions to guide answer generation..."
+              rows={3}
+              className="w-full px-3 py-2 text-xs rounded-md border border-stroke-divider bg-bg-card focus:outline-none focus:ring-2 focus:ring-accent resize-none"
+            />
+            <p className="text-xs text-fg-muted">
+              Guide how answers are synthesized (configured on the knowledge base)
+            </p>
+          </div>
+        )}
       </div>
 
       {/* Knowledge Source Parameters */}

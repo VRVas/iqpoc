@@ -43,6 +43,14 @@ export function CreateKnowledgeBaseForm({
   // Advanced retrieval configuration removed per spec simplification
   const { toast } = useToast()
 
+  // Check if any selected sources are "web" kind
+  const hasWebSource = React.useMemo(() => {
+    return selectedSources.some(sourceName => {
+      const source = knowledgeSources.find(s => s.name === sourceName)
+      return source?.kind?.toLowerCase() === 'web'
+    })
+  }, [selectedSources, knowledgeSources])
+
   const form = useForm<z.infer<typeof createKnowledgeBaseSchema>>({
     resolver: zodResolver(createKnowledgeBaseSchema),
     defaultValues: {
@@ -61,12 +69,27 @@ export function CreateKnowledgeBaseForm({
   const watchedOutputModality = watch('outputModality')
   const watchedModel = watch('modelDeployment')
 
+  // Enforce web source constraints
+  React.useEffect(() => {
+    if (hasWebSource) {
+      // Web sources require Answer Synthesis mode
+      if (watchedOutputModality !== 'answerSynthesis') {
+        setValue('outputModality', 'answerSynthesis')
+        toast({
+          type: 'warning',
+          title: 'Output mode changed',
+          description: 'Web sources require Answer Synthesis mode.'
+        })
+      }
+    }
+  }, [hasWebSource, watchedOutputModality, setValue, toast])
+
   const toggleSource = (sourceName: string) => {
     setSelectedSources(prev => {
       const updated = prev.includes(sourceName)
         ? prev.filter(name => name !== sourceName)
         : [...prev, sourceName]
-      setValue('sources', updated)
+      setValue('sources', updated, { shouldValidate: true })
       return updated
     })
   }
@@ -92,14 +115,11 @@ export function CreateKnowledgeBaseForm({
           },
         ],
         knowledgeSources: knowledgeSourcesPayload,
-        outputConfiguration: {
-          modality: data.outputModality,
-          answerInstructions:
-            data.outputModality === 'answerSynthesis'
-              ? (data.answerInstructions?.trim() || undefined)
-              : undefined,
-          // includeActivity removed in simplified create flow
-        },
+        outputMode: data.outputModality,
+        answerInstructions:
+          data.outputModality === 'answerSynthesis'
+            ? (data.answerInstructions?.trim() || undefined)
+            : undefined,
       }
 
       await createKnowledgeBase(payload)
@@ -242,6 +262,7 @@ export function CreateKnowledgeBaseForm({
                     setValue('outputModality', value as 'extractiveData' | 'answerSynthesis')
                     trigger('outputModality')
                   }}
+                  disabled={hasWebSource}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Select output modality" />
@@ -263,7 +284,11 @@ export function CreateKnowledgeBaseForm({
                 </Select>
               </FormControl>
               <FormDescription>
-                Determine how responses are constructed from retrieved knowledge.
+                {hasWebSource ? (
+                  <span className="text-status-warning">⚠️ Web sources require Answer Synthesis mode</span>
+                ) : (
+                  'Determine how responses are constructed from retrieved knowledge.'
+                )}
               </FormDescription>
               <FormMessage />
             </FormField>
@@ -320,10 +345,7 @@ export function CreateKnowledgeBaseForm({
                         <input
                           type="checkbox"
                           checked={selectedSources.includes(source.name)}
-                          onChange={() => {
-                            toggleSource(source.name)
-                            setTimeout(() => trigger('sources'), 0)
-                          }}
+                          onChange={() => toggleSource(source.name)}
                           className="rounded border-stroke-divider"
                         />
                         <div className="flex-1">

@@ -35,12 +35,8 @@ interface AgentData {
       modelName: string
     }
   }>
-  outputConfiguration?: {
-    modality: string
-    answerInstructions?: string | null
-    attemptFastPath?: boolean | null
-    includeActivity?: boolean | null
-  }
+  outputMode?: string
+  answerInstructions?: string | null
   retrievalInstructions?: string | null
   requestLimits?: {
     maxRuntimeInSeconds?: number | null
@@ -73,20 +69,28 @@ export function EditAgentForm({
   )
   const { toast } = useToast()
 
+  // Check if any selected sources are "web" kind
+  const hasWebSource = React.useMemo(() => {
+    return selectedSources.some(sourceName => {
+      const source = knowledgeSources.find(s => s.name === sourceName)
+      return source?.kind?.toLowerCase() === 'web'
+    })
+  }, [selectedSources, knowledgeSources])
+
   const form = useForm({
     defaultValues: {
       name: agent.name,
       description: agent.description || '',
       model: agent.models?.[0]?.azureOpenAIParameters?.modelName || 'gpt-4o-mini',
-      outputModality: agent.outputConfiguration?.modality || 'extractiveData',
-      answerInstructions: agent.outputConfiguration?.answerInstructions || '',
+      outputModality: (agent as any).outputMode || 'extractiveData',
+      answerInstructions: agent.answerInstructions || '',
       retrievalInstructions: agent.retrievalInstructions || '',
       includeReferences: agent.knowledgeSources?.[0]?.includeReferences ?? true,
       includeReferenceSourceData: agent.knowledgeSources?.[0]?.includeReferenceSourceData ?? false,
       alwaysQuerySource: agent.knowledgeSources?.[0]?.alwaysQuerySource ?? false,
       maxSubQueries: agent.knowledgeSources?.[0]?.maxSubQueries ?? 5,
       rerankerThreshold: agent.knowledgeSources?.[0]?.rerankerThreshold ?? 2.1,
-      includeActivity: agent.outputConfiguration?.includeActivity ?? true,
+      includeActivity: true,
       maxRuntimeInSeconds: agent.requestLimits?.maxRuntimeInSeconds ?? 60,
       maxOutputSize: agent.requestLimits?.maxOutputSize ?? 100000,
       sources: selectedSources,
@@ -99,6 +103,21 @@ export function EditAgentForm({
   const watchedModel = watch('model')
   const watchedOutputModality = watch('outputModality')
   const [showAdvanced, setShowAdvanced] = React.useState(false)
+
+  // Enforce web source constraints
+  React.useEffect(() => {
+    if (hasWebSource) {
+      // Web sources require Answer Synthesis mode
+      if (watchedOutputModality !== 'answerSynthesis') {
+        setValue('outputModality', 'answerSynthesis')
+        toast({
+          type: 'warning',
+          title: 'Output mode changed',
+          description: 'Web sources require Answer Synthesis mode.'
+        })
+      }
+    }
+  }, [hasWebSource, watchedOutputModality, setValue, toast])
 
   const handleFormSubmit = async (data: any) => {
     try {
@@ -133,12 +152,8 @@ export function EditAgentForm({
             maxSubQueries: showAdvanced && data.maxSubQueries !== 5 ? data.maxSubQueries : null,
             rerankerThreshold: showAdvanced && data.rerankerThreshold !== 2.1 ? data.rerankerThreshold : null
         })),
-        outputConfiguration: {
-          modality: data.outputModality,
-          answerInstructions: data.outputModality === 'answerSynthesis' ? (data.answerInstructions || null) : null,
-          attemptFastPath: false,
-          includeActivity: data.includeActivity || null
-        },
+        outputMode: data.outputModality,
+        answerInstructions: data.outputModality === 'answerSynthesis' ? (data.answerInstructions || null) : null,
         requestLimits: {
           maxRuntimeInSeconds: showAdvanced ? data.maxRuntimeInSeconds : null,
           maxOutputSize: showAdvanced ? data.maxOutputSize : null
@@ -343,6 +358,7 @@ export function EditAgentForm({
                   onValueChange={(value) => {
                     setValue('outputModality', value)
                   }}
+                  disabled={hasWebSource}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Select output mode" />
@@ -364,7 +380,11 @@ export function EditAgentForm({
                 </Select>
               </FormControl>
               <FormDescription>
-                How the agent structures its responses.
+                {hasWebSource ? (
+                  <span className="text-status-warning">⚠️ Web sources require Answer Synthesis mode</span>
+                ) : (
+                  'How the agent structures its responses.'
+                )}
               </FormDescription>
               <FormMessage />
             </FormField>
