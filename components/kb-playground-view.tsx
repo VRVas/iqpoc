@@ -18,6 +18,7 @@ import { KBViewCodeModal } from '@/components/kb-view-code-modal'
 import { processImageFile } from '@/lib/imageProcessing'
 import { useConversationStarters } from '@/lib/conversationStarters'
 import { cn, formatRelativeTime, cleanTextSnippet } from '@/lib/utils'
+import { TraceExplorer } from '@/components/trace-explorer'
 import {
   Select,
   SelectContent,
@@ -40,11 +41,13 @@ type KnowledgeAgent = {
   retrievalInstructions?: string
   knowledgeSources?: Array<{
     name: string
+    kind?: string
     includeReferences?: boolean
     includeReferenceSourceData?: boolean | null
     alwaysQuerySource?: boolean | null
     maxSubQueries?: number | null
     rerankerThreshold?: number | null
+    headers?: Record<string, string>
   }>
 }
 
@@ -373,6 +376,54 @@ export function KBPlaygroundView({ preselectedAgent }: KBPlaygroundViewProps) {
     setImageWarning('')
   }
 
+  const buildKnowledgeSourceParams = () => {
+    const userOverrides = runtimeSettings.knowledgeSourceParams && runtimeSettings.knowledgeSourceParams.length > 0
+      ? runtimeSettings.knowledgeSourceParams
+      : null
+
+    const baseParams = userOverrides || (selectedAgent?.knowledgeSources || []).map(ks => ({
+      knowledgeSourceName: ks.name,
+      kind: ks.kind,
+      alwaysQuerySource: ks.alwaysQuerySource ?? undefined,
+      includeReferences: ks.includeReferences ?? true,
+      includeReferenceSourceData: ks.includeReferenceSourceData ?? true,
+      rerankerThreshold: ks.rerankerThreshold ?? undefined,
+      maxSubQueries: ks.maxSubQueries ?? undefined,
+      headers: ks.headers
+    }))
+
+    if (!baseParams || baseParams.length === 0) {
+      return undefined
+    }
+
+    return baseParams
+      .map((param) => {
+        const name = param.knowledgeSourceName || (param as any).name
+        if (!name) {
+          return null
+        }
+
+        const cleanedParam: any = {
+          knowledgeSourceName: name,
+          kind: param.kind || 'searchIndex'
+        }
+
+        if (param.alwaysQuerySource === true) cleanedParam.alwaysQuerySource = true
+        cleanedParam.includeReferences = param.includeReferences !== false
+        cleanedParam.includeReferenceSourceData = param.includeReferenceSourceData !== false
+
+        if (typeof param.rerankerThreshold === 'number') cleanedParam.rerankerThreshold = param.rerankerThreshold
+        if (typeof param.maxSubQueries === 'number') cleanedParam.maxSubQueries = param.maxSubQueries
+
+        if (param.headers && Object.keys(param.headers).length > 0) {
+          cleanedParam.headers = param.headers
+        }
+
+        return cleanedParam
+      })
+      .filter(Boolean)
+  }
+
   const sendPrompt = async (prompt: string) => {
     if (!selectedAgent || isLoading) return
     
@@ -424,32 +475,11 @@ export function KBPlaygroundView({ preselectedAgent }: KBPlaygroundViewProps) {
         }
       }
       
-      if (runtimeSettings.knowledgeSourceParams && runtimeSettings.knowledgeSourceParams.length > 0) {
-        // Clean up knowledge source params: remove false boolean values
-        // Azure API requires: if a boolean is false, omit it; if true, include it
-        apiParams.knowledgeSourceParams = runtimeSettings.knowledgeSourceParams.map(param => {
-          const cleanedParam: any = {
-            knowledgeSourceName: param.knowledgeSourceName,
-            kind: param.kind
-          }
-          
-          // Only include boolean fields if they are true
-          if (param.alwaysQuerySource === true) cleanedParam.alwaysQuerySource = true
-          if (param.includeReferences === true) cleanedParam.includeReferences = true
-          if (param.includeReferenceSourceData === true) cleanedParam.includeReferenceSourceData = true
-          
-          // Include numeric fields if they exist
-          if (param.rerankerThreshold !== undefined) cleanedParam.rerankerThreshold = param.rerankerThreshold
-          if (param.maxSubQueries !== undefined) cleanedParam.maxSubQueries = param.maxSubQueries
-          
-          // Include headers if they exist and are not empty
-          if (param.headers && Object.keys(param.headers).length > 0) {
-            cleanedParam.headers = param.headers
-          }
-          
-          return cleanedParam
-        })
+      const knowledgeSourceParams = buildKnowledgeSourceParams()
+      if (knowledgeSourceParams && knowledgeSourceParams.length > 0) {
+        apiParams.knowledgeSourceParams = knowledgeSourceParams
       }
+
 
       // Determine if we should use intents instead of messages
       // When reasoning effort is 'minimal', use intents format
@@ -609,31 +639,17 @@ export function KBPlaygroundView({ preselectedAgent }: KBPlaygroundViewProps) {
         }
       }
       
-      if (runtimeSettings.knowledgeSourceParams && runtimeSettings.knowledgeSourceParams.length > 0) {
-        // Clean up knowledge source params: remove false boolean values
-        // Azure API requires: if a boolean is false, omit it; if true, include it
-        apiParams.knowledgeSourceParams = runtimeSettings.knowledgeSourceParams.map(param => {
-          const cleanedParam: any = {
-            knowledgeSourceName: param.knowledgeSourceName,
-            kind: param.kind
-          }
-          
-          // Only include boolean fields if they are true
-          if (param.alwaysQuerySource === true) cleanedParam.alwaysQuerySource = true
-          if (param.includeReferences === true) cleanedParam.includeReferences = true
-          if (param.includeReferenceSourceData === true) cleanedParam.includeReferenceSourceData = true
-          
-          // Include numeric fields if they exist
-          if (param.rerankerThreshold !== undefined) cleanedParam.rerankerThreshold = param.rerankerThreshold
-          if (param.maxSubQueries !== undefined) cleanedParam.maxSubQueries = param.maxSubQueries
-          
-          // Include headers if they exist and are not empty
-          if (param.headers && Object.keys(param.headers).length > 0) {
-            cleanedParam.headers = param.headers
-          }
-          
-          return cleanedParam
-        })
+      const knowledgeSourceParamsSubmit = buildKnowledgeSourceParams()
+      if (knowledgeSourceParamsSubmit && knowledgeSourceParamsSubmit.length > 0) {
+        apiParams.knowledgeSourceParams = knowledgeSourceParamsSubmit
+      }
+
+      // Always request references and their source data in the playground
+      if (typeof apiParams.includeReferences === 'undefined') {
+        apiParams.includeReferences = true
+      }
+      if (typeof apiParams.includeReferenceSourceData === 'undefined') {
+        apiParams.includeReferenceSourceData = true
       }
 
       // Debug logging - HANDLE SUBMIT
@@ -1036,13 +1052,11 @@ export function KBPlaygroundView({ preselectedAgent }: KBPlaygroundViewProps) {
 }
 
 function MessageBubble({ message, agent, showCostEstimates }: { message: Message; agent?: KnowledgeAgent; showCostEstimates?: boolean }) {
-  // Auto-expand if there are references or activity
-  const hasContent = (message.references && message.references.length > 0) || (message.activity && message.activity.length > 0)
-  const [expanded, setExpanded] = useState(hasContent)
-
-  const shouldShowSnippets = agent?.knowledgeSources?.some(ks => ks.includeReferenceSourceData === true)
   const isUser = message.role === 'user'
-
+  
+  // Check if we have trace data (new format)
+  const hasTraceData = message.activity && message.activity.length > 0 && message.references
+  
   // Extract MCP tool calls from references
   const mcpToolCalls = message.references?.filter(ref => ref.type === 'mcpTool').map(ref => ({
     toolName: ref.toolName || '',
@@ -1051,16 +1065,6 @@ function MessageBubble({ message, agent, showCostEstimates }: { message: Message
     title: ref.sourceData?.title || '',
     content: ref.sourceData?.content || ''
   })) || []
-
-  // Filter out MCP tools from regular references
-  const regularReferences = message.references?.filter(ref => ref.type !== 'mcpTool') || []
-  
-  // Update expanded state when content changes
-  useEffect(() => {
-    if (hasContent) {
-      setExpanded(true)
-    }
-  }, [hasContent])
 
   return (
     <div className={cn('flex items-start gap-4', isUser && 'flex-row-reverse')}>
@@ -1092,7 +1096,7 @@ function MessageBubble({ message, agent, showCostEstimates }: { message: Message
                       references={message.references}
                       activity={message.activity}
                       messageId={message.id}
-                      onActivate={() => setExpanded(true)}
+                      onActivate={() => {}}
                     />
                   </p>
                 )
@@ -1111,336 +1115,23 @@ function MessageBubble({ message, agent, showCostEstimates }: { message: Message
             })}
           </div>
 
-          {((message.references && message.references.length > 0) || (message.activity && message.activity.length > 0)) && (
+          {/* New Trace Explorer UI */}
+          {!isUser && hasTraceData && (
             <div className="mt-4 pt-4 border-t border-stroke-divider">
-              <button
-                onClick={() => setExpanded(!expanded)}
-                className="flex items-center gap-2 text-sm font-medium text-fg-muted hover:text-fg-default"
-              >
-                <span>
-                  {regularReferences.length > 0
-                    ? `${regularReferences.length} reference${regularReferences.length > 1 ? 's' : ''}`
-                    : `${message.activity?.length || 0} search${(message.activity?.length || 0) > 1 ? 'es' : ''}`
-                  }
-                  {mcpToolCalls.length > 0 && ` • ${mcpToolCalls.length} tool call${mcpToolCalls.length > 1 ? 's' : ''}`}
-                </span>
-                {expanded ? (
-                  <ChevronUp20Regular className="h-3 w-3" />
-                ) : (
-                  <ChevronDown20Regular className="h-3 w-3" />
-                )}
-              </button>
+              <TraceExplorer
+                response={{
+                  response: [{ role: 'assistant', content: message.content.map(c => c.type === 'text' ? { type: 'text', text: c.text } : { type: 'image', image: { url: c.image.url } }) }],
+                  activity: message.activity as any || [],
+                  references: message.references as any || []
+                }}
+              />
+            </div>
+          )}
 
-              <AnimatePresence>
-                {expanded && (
-                  <motion.div
-                    initial={{ height: 0, opacity: 0 }}
-                    animate={{ height: 'auto', opacity: 1 }}
-                    exit={{ height: 0, opacity: 0 }}
-                    transition={{ duration: 0.2 }}
-                    className="mt-3 space-y-3 overflow-hidden w-full"
-                  >
-                    {/* MCP Tool Calls */}
-                    {mcpToolCalls.length > 0 && (
-                      <MCPToolCallDisplay toolCalls={mcpToolCalls} />
-                    )}
-
-                    {/* References */}
-                    {regularReferences.length > 0 && (
-                      <div className="space-y-2 w-full">
-                        <h6 className="text-xs font-medium text-fg-muted uppercase tracking-wide">References</h6>
-                        {Array.from(new Map(regularReferences.map((r, idx) => [r.blobUrl || r.id, { r, idx }])).values()).map(({ r: ref, idx }) => {
-                          const fileName = ref.blobUrl ? decodeURIComponent(ref.blobUrl.split('/').pop() || ref.id) : (ref.docKey || ref.id)
-                          const activity = message.activity?.find(a => a.id === ref.activitySource)
-                          const label = activity?.knowledgeSourceName || fileName
-
-                          return (
-                            <div id={`ref-${message.id}-${idx}`} key={ref.id + (ref.blobUrl || '')} className="p-3 bg-bg-subtle rounded-md group border border-transparent hover:border-accent/40 transition w-full">
-                              <div className="flex items-center justify-between mb-2">
-                                <span className="flex items-center gap-1 text-xs font-medium text-accent">
-                                  <SourceKindIcon kind={ref.type} size={14} variant="plain" />
-                                  {label || ref.type}
-                                </span>
-                                {ref.rerankerScore && (
-                                  <span className="text-xs text-fg-muted">{ref.rerankerScore.toFixed(2)}</span>
-                                )}
-                              </div>
-                              <p className="text-xs text-fg-muted break-all" title={fileName}>
-                                <span className="font-medium inline-flex items-center gap-1 max-w-full">
-                                  <span className="truncate max-w-[240px] inline-block align-bottom">{fileName}</span>
-                                </span>
-                              </p>
-
-                              {/* Sensitivity label chip for remote SharePoint */}
-                              {ref.type === 'remoteSharePoint' && ref.searchSensitivityLabelInfo && (
-                                <div className="mt-2 flex items-center gap-2">
-                                  <span 
-                                    className="inline-flex items-center gap-1.5 px-2 py-1 rounded-full text-[10px] font-medium"
-                                    style={{ 
-                                      backgroundColor: `${ref.searchSensitivityLabelInfo.color}20`,
-                                      color: ref.searchSensitivityLabelInfo.color,
-                                      borderWidth: '1px',
-                                      borderStyle: 'solid',
-                                      borderColor: `${ref.searchSensitivityLabelInfo.color}40`
-                                    }}
-                                    title={ref.searchSensitivityLabelInfo.tooltip}
-                                  >
-                                    {ref.searchSensitivityLabelInfo.isEncrypted && (
-                                      <svg width="10" height="10" viewBox="0 0 16 16" fill="currentColor">
-                                        <path d="M8 1C6.34 1 5 2.34 5 4v2H4c-.55 0-1 .45-1 1v6c0 .55.45 1 1 1h8c.55 0 1-.45 1-1V7c0-.55-.45-1-1-1h-1V4c0-1.66-1.34-3-3-3zm0 1c1.11 0 2 .89 2 2v2H6V4c0-1.11.89-2 2-2z"/>
-                                      </svg>
-                                    )}
-                                    {ref.searchSensitivityLabelInfo.displayName}
-                                  </span>
-                                </div>
-                              )}
-
-                              {/* Show snippet or web link */}
-                              {(() => {
-                                // Support multiple sourceData formats:
-                                // 1. sourceData.snippet (blob, OneLake)
-                                // 2. sourceData.extracts[].text (remoteSharePoint, indexed sources)
-                                // 3. sourceData.url + title (web sources - show as hyperlink)
-                                
-                                // For web sources, show title as hyperlink
-                                if (ref.type === 'web' && ref.sourceData?.url) {
-                                  const webTitle = ref.sourceData.title || ref.sourceData.url
-                                  const webUrl = ref.sourceData.url
-                                  
-                                  return (
-                                    <div className="mt-3 pt-3 border-t border-stroke-divider w-full">
-                                      <a 
-                                        href={webUrl} 
-                                        target="_blank" 
-                                        rel="noopener noreferrer"
-                                        className="text-xs text-accent hover:text-accent/80 hover:underline break-all"
-                                      >
-                                        {webTitle}
-                                      </a>
-                                    </div>
-                                  )
-                                }
-                                
-                                // For other sources, show snippet/extracts
-                                const snippet = ref.sourceData?.snippet
-                                const extracts = ref.sourceData?.extracts
-                                const extractText = extracts && Array.isArray(extracts) && extracts.length > 0
-                                  ? extracts.map(e => e.text).join('\n\n')
-                                  : null
-                                
-                                const displayText = snippet || extractText
-                                
-                                if (!displayText) return null
-                                
-                                return (
-                                  <div className="mt-3 pt-3 border-t border-stroke-divider w-full">
-                                    <div className="flex items-center gap-2 mb-2">
-                                      <div className="text-[10px] font-medium text-fg-muted uppercase tracking-wide">
-                                        Source snippet
-                                      </div>
-                                      <div className="flex-1 h-px bg-stroke-divider"></div>
-                                    </div>
-                                    <div className="text-xs text-fg-default bg-bg-default/30 border border-stroke-divider rounded p-4 max-h-64 overflow-y-auto w-full">
-                                      <div className="leading-relaxed text-fg-muted break-words">
-                                        {cleanTextSnippet(displayText)}
-                                      </div>
-                                    </div>
-                                  </div>
-                                )
-                              })()}
-                            </div>
-                          )
-                        })}
-                      </div>
-                    )}
-
-
-                    {/* Activity - Source Annotations & Metrics */}
-                    {message.activity && message.activity.length > 0 && (
-                      <div className="space-y-3">
-                        {/* Sources Queried */}
-                        <div className="space-y-2">
-                          <h6 className="text-xs font-medium text-fg-muted uppercase tracking-wide">Sources Queried</h6>
-                          <div className="flex flex-wrap gap-2">
-                            {message.activity.filter(act => 
-                              act.type === 'searchIndex' || 
-                              act.type === 'azureBlob' || 
-                              act.type === 'remoteSharePoint' || 
-                              act.type === 'web'
-                            ).map((activity) => {
-                              const sourceKind = activity.type
-                              const sourceName = activity.knowledgeSourceName || 'Unknown Source'
-                              const query = 
-                                activity.searchIndexArguments?.search || 
-                                activity.azureBlobArguments?.search ||
-                                activity.remoteSharePointArguments?.search ||
-                                activity.webArguments?.search
-                              const resultCount = activity.count !== undefined ? activity.count : '?'
-                              const duration = activity.elapsedMs ? `${activity.elapsedMs}ms` : ''
-
-                              const tooltipText = [
-                                sourceName,
-                                query ? `Query: "${query}"` : null,
-                                `${resultCount} results`,
-                                duration
-                              ].filter(Boolean).join(' • ')
-
-                              return (
-                                <div
-                                  key={activity.id}
-                                  className="inline-flex items-center gap-2 px-3 py-1.5 bg-bg-subtle border border-stroke-divider rounded-full hover:bg-accent-subtle hover:border-accent transition-all cursor-default group"
-                                  title={tooltipText}
-                                >
-                                  <SourceKindIcon
-                                    kind={sourceKind}
-                                    size={14}
-                                    variant="plain"
-                                    className="flex-shrink-0"
-                                  />
-                                  <span className="text-xs font-medium text-fg-default group-hover:text-accent transition-colors">
-                                    {sourceName}
-                                  </span>
-                                  <span className="text-xs text-fg-muted">
-                                    {resultCount}
-                                  </span>
-                                </div>
-                              )
-                            })}
-                          </div>
-                        </div>
-
-                        {/* Activity Details - Show all activity steps */}
-                        <div className="space-y-2">
-                          <h6 className="text-xs font-medium text-fg-muted uppercase tracking-wide">Activity Details</h6>
-                          <div className="flex flex-col gap-2">
-                            {message.activity.map((act, idx) => {
-                              // Show type, description, and arguments for each activity step
-                              // Some activity objects may have toolName/description, but not all. Use optional chaining and fallback.
-                              const label = act.knowledgeSourceName || (act as any).toolName || act.type || 'Step';
-                              const details: string[] = [];
-                              
-                              // Add search query based on activity type
-                              if (act.searchIndexArguments?.search) details.push(`Query: "${act.searchIndexArguments.search}"`);
-                              if (act.azureBlobArguments?.search) details.push(`Query: "${act.azureBlobArguments.search}"`);
-                              if (act.remoteSharePointArguments?.search) details.push(`Query: "${act.remoteSharePointArguments.search}"`);
-                              if (act.webArguments?.search) details.push(`Query: "${act.webArguments.search}"`);
-                              
-                              // Add other details
-                              if ((act as any).toolName) details.push(`Tool: ${(act as any).toolName}`);
-                              if ((act as any).description) details.push((act as any).description);
-                              if (act.count !== undefined) details.push(`${act.count} results`);
-                              if (act.elapsedMs) details.push(`${act.elapsedMs}ms`);
-                              if (act.inputTokens || act.outputTokens) details.push(`Tokens: ${(act.inputTokens || 0) + (act.outputTokens || 0)}`);
-
-                              return (
-                                <div key={act.id || idx} className="flex items-start gap-2 p-2 bg-bg-subtle border border-stroke-divider rounded-md">
-                                  <SourceKindIcon kind={act.type} size={14} variant="plain" className="mt-0.5" />
-                                  <div className="flex-1">
-                                    <div className="text-xs font-medium text-fg-default">{label}</div>
-                                    {details.length > 0 && (
-                                      <div className="text-xs text-fg-muted mt-0.5">{details.join(' • ')}</div>
-                                    )}
-                                  </div>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        </div>
-
-                        {/* Response Metrics */}
-                        {(() => {
-                          // Calculate metrics
-                          const totalTime = message.activity.reduce((sum, act) => sum + (act.elapsedMs || 0), 0)
-                          const totalTokens = message.activity.reduce((sum, act) => {
-                            return sum + (act.inputTokens || 0) + (act.outputTokens || 0)
-                          }, 0)
-
-                          // Get unique sources with counts
-                          const sourcesMap = new Map<string, number>()
-                          message.activity
-                            .filter(act => 
-                              act.type === 'searchIndex' || 
-                              act.type === 'azureBlob' || 
-                              act.type === 'remoteSharePoint' || 
-                              act.type === 'web'
-                            )
-                            .forEach(act => {
-                              const name = act.knowledgeSourceName || 'Unknown'
-                              const count = act.count || 0
-                              sourcesMap.set(name, (sourcesMap.get(name) || 0) + count)
-                            })
-                          const uniqueSourcesCount = sourcesMap.size
-                          const totalResults = Array.from(sourcesMap.values()).reduce((sum, count) => sum + count, 0)
-
-                          const formatTime = (ms: number) => {
-                            if (ms < 1000) return `${ms}ms`
-                            return `${(ms / 1000).toFixed(1)}s`
-                          }
-
-                          // Cost calculation
-                          const inputTokens = message.activity.reduce((sum, act) => sum + (act.inputTokens || 0), 0)
-                          const outputTokens = message.activity.reduce((sum, act) => sum + (act.outputTokens || 0), 0)
-
-                          // Count semantic queries (searches performed)
-                          const semanticQueries = message.activity.filter(act =>
-                            act.type === 'searchIndex' || 
-                            act.type === 'azureBlob' || 
-                            act.type === 'remoteSharePoint' || 
-                            act.type === 'web'
-                          ).length
-
-                          // Azure AI Search Pricing (Standard tier, after free tier)
-                          const PRICING = {
-                            semanticQueryCost: 1.00 / 1000, // $1.00 per 1,000 queries
-                            agenticRetrievalTokenCost: 0.022 / 1000000 // $0.022 per 1M tokens
-                          }
-
-                          const queryCost = semanticQueries * PRICING.semanticQueryCost
-                          const tokenCost = totalTokens * PRICING.agenticRetrievalTokenCost
-                          const totalCost = queryCost + tokenCost
-
-                          const formatCost = (cost: number) => {
-                            if (cost < 0.01) return `$${cost.toFixed(4)}`
-                            return `$${cost.toFixed(3)}`
-                          }
-
-                          return (
-                            <div className="space-y-2">
-                              <div className="grid grid-cols-3 gap-3 p-3 bg-bg-subtle border border-stroke-divider rounded-md text-center">
-                                <div>
-                                  <div className="text-[10px] text-fg-muted uppercase tracking-wider mb-0.5">Time</div>
-                                  <div className="text-sm font-medium text-fg-default">{formatTime(totalTime)}</div>
-                                </div>
-                                <div>
-                                  <div className="text-[10px] text-fg-muted uppercase tracking-wider mb-0.5">Sources</div>
-                                  <div className="text-sm font-medium text-fg-default">{uniqueSourcesCount}</div>
-                                </div>
-                                <div>
-                                  <div className="text-[10px] text-fg-muted uppercase tracking-wider mb-0.5">Tokens</div>
-                                  <div className="text-sm font-medium text-fg-default">{totalTokens.toLocaleString()}</div>
-                                </div>
-                              </div>
-
-                              {/* Cost Estimate */}
-                              {showCostEstimates && (
-                                <div
-                                  className="p-3 bg-accent-subtle/30 border border-accent/30 rounded-md cursor-default group"
-                                  title={`${semanticQueries} semantic ${semanticQueries === 1 ? 'query' : 'queries'} • ${totalTokens.toLocaleString()} agentic retrieval tokens`}
-                                >
-                                  <div className="text-xs font-medium text-accent flex items-center gap-1.5">
-                                    <span>💰</span>
-                                    <span className="font-mono text-sm">{formatCost(totalCost)}</span>
-                                  </div>
-                                </div>
-                              )}
-                            </div>
-                          )
-                        })()}
-                      </div>
-                    )}
-                  </motion.div>
-                )}
-              </AnimatePresence>
+          {/* MCP Tool Calls (if any) */}
+          {mcpToolCalls.length > 0 && (
+            <div className="mt-4 pt-4 border-t border-stroke-divider">
+              <MCPToolCallDisplay toolCalls={mcpToolCalls} />
             </div>
           )}
 

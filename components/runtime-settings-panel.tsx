@@ -178,7 +178,7 @@ export function RuntimeSettingsPanel({
           kind: kind,
           alwaysQuerySource: ks.alwaysQuerySource ?? false,
           includeReferences: ks.includeReferences ?? true,
-          includeReferenceSourceData: ks.includeReferenceSourceData ?? false,
+          includeReferenceSourceData: ks.includeReferenceSourceData ?? true,
           rerankerThreshold: ks.rerankerThreshold,
           headers: {}
         }
