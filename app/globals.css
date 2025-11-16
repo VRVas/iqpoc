@@ -6,90 +6,90 @@
   :root {
     color-scheme: light;
 
-    /* Light surface tokens */
-    --color-bg-canvas: 224 40% 97%;
-    --color-bg-subtle: 226 45% 94%;
+    /* Light Neosonic surfaces */
+    --color-bg-canvas: 214 56% 97%;
+    --color-bg-subtle: 216 52% 95%;
     --color-bg-card: 0 0% 100%;
-    --color-bg-elevated: 226 48% 98%;
-    --color-bg-hover: 226 82% 96%;
-    --color-bg-pressed: 228 88% 90%;
+    --color-bg-elevated: 215 46% 92%;
+    --color-bg-hover: 214 60% 90%;
+    --color-bg-pressed: 214 66% 82%;
 
-    --color-fg-default: 234 44% 14%;
-    --color-fg-muted: 228 22% 44%;
-    --color-fg-subtle: 228 18% 60%;
-    --color-fg-on-accent: 0 0% 100%;
+    --color-fg-default: 221 57% 11%;
+    --color-fg-muted: 222 20% 38%;
+    --color-fg-subtle: 222 14% 52%;
+    --color-fg-on-accent: 210 40% 98%;
 
-    --color-accent-default: 258 92% 64%;
-    --color-accent-hover: 258 92% 60%;
-    --color-accent-pressed: 258 92% 52%;
-    --color-accent-subtle: 258 92% 94%;
-    --color-accent-muted: 258 75% 86%;
-    --color-accent-glow: 258 100% 72%;
-    --color-accent-gradient-from: 258 96% 68%;
-    --color-accent-gradient-to: 281 96% 67%;
+    --color-accent-default: 201 92% 55%;
+    --color-accent-hover: 201 92% 50%;
+    --color-accent-pressed: 201 92% 43%;
+    --color-accent-subtle: 201 76% 92%;
+    --color-accent-muted: 201 68% 78%;
+    --color-accent-glow: 274 84% 72%;
+    --color-accent-gradient-from: 200 94% 63%;
+    --color-accent-gradient-to: 274 86% 67%;
 
-    --color-stroke-divider: 228 24% 84%;
-    --color-stroke-strong: 226 24% 70%;
-    --color-stroke-focus: 258 92% 64%;
+    --color-stroke-divider: 216 33% 86%;
+    --color-stroke-strong: 216 24% 70%;
+    --color-stroke-focus: 200 94% 63%;
 
-    --color-status-success: 146 62% 40%;
-    --color-status-warning: 35 96% 54%;
-    --color-status-danger: 346 82% 56%;
-    --color-status-info: 214 94% 68%;
+    --color-status-success: 158 64% 45%;
+    --color-status-warning: 36 92% 55%;
+    --color-status-danger: 345 85% 55%;
+    --color-status-info: 201 92% 55%;
 
-    --color-overlay-soft: 228 28% 88%;
-    --color-overlay-strong: 258 92% 64%;
+    --color-overlay-soft: 214 55% 90%;
+    --color-overlay-strong: 274 86% 67%;
 
-    --color-glass-surface: hsla(0, 0%, 100%, 0.72);
-    --color-glass-hover: hsla(226, 52%, 96%, 0.82);
-    --color-glass-border: hsla(228, 60%, 78%, 0.45);
+    --color-glass-surface: hsla(0, 0%, 100%, 0.78);
+    --color-glass-hover: hsla(210, 56%, 94%, 0.92);
+    --color-glass-border: hsla(213, 68%, 78%, 0.45);
 
-    --shadow-color: 227 32% 12%;
-    --shadow-glow: 264 96% 70%;
+    --shadow-color: 222 32% 16%;
+    --shadow-glow: 274 96% 70%;
   }
 
   .dark {
     color-scheme: dark;
 
-    --color-bg-canvas: 246 44% 6%;
-    --color-bg-subtle: 248 44% 10%;
-    --color-bg-card: 248 36% 14%;
-    --color-bg-elevated: 248 38% 16%;
-    --color-bg-hover: 248 38% 18%;
-    --color-bg-pressed: 248 36% 22%;
+    --color-bg-canvas: 222 47% 11%;
+    --color-bg-subtle: 223 44% 14%;
+    --color-bg-card: 224 38% 18%;
+    --color-bg-elevated: 223 38% 21%;
+    --color-bg-hover: 223 42% 25%;
+    --color-bg-pressed: 224 44% 30%;
 
-    --color-fg-default: 220 40% 96%;
-    --color-fg-muted: 225 28% 72%;
-    --color-fg-subtle: 226 22% 52%;
+    --color-fg-default: 214 38% 92%;
+    --color-fg-muted: 220 18% 72%;
+    --color-fg-subtle: 222 16% 60%;
     --color-fg-on-accent: 0 0% 100%;
 
-    --color-accent-default: 263 100% 70%;
-    --color-accent-hover: 265 100% 64%;
-    --color-accent-pressed: 268 100% 58%;
-    --color-accent-subtle: 268 86% 20%;
-    --color-accent-muted: 266 78% 32%;
-    --color-accent-glow: 263 100% 72%;
-    --color-accent-gradient-from: 260 100% 66%;
-    --color-accent-gradient-to: 284 100% 68%;
+    --color-accent-default: 201 92% 65%;
+    --color-accent-hover: 201 92% 60%;
+    --color-accent-pressed: 201 92% 52%;
+    --color-accent-subtle: 223 42% 22%;
+    --color-accent-muted: 271 65% 48%;
+    --color-accent-glow: 274 86% 72%;
+    --color-accent-gradient-from: 201 92% 60%;
+    --color-accent-gradient-to: 274 86% 67%;
 
-    --color-stroke-divider: 244 26% 24%;
-    --color-stroke-strong: 244 30% 36%;
-    --color-stroke-focus: 265 100% 64%;
+    --color-stroke-divider: 223 32% 26%;
+    --color-stroke-strong: 223 32% 34%;
+    --color-stroke-focus: 201 92% 65%;
 
-    --color-status-success: 146 62% 50%;
-    --color-status-warning: 35 96% 60%;
-    --color-status-danger: 346 82% 64%;
-    --color-status-info: 214 94% 70%;
+    --color-status-success: 158 64% 52%;
+    --color-status-warning: 36 92% 62%;
+    --color-status-danger: 345 86% 62%;
+    --color-status-info: 200 92% 64%;
 
-    --color-overlay-soft: 244 40% 16%;
-    --color-overlay-strong: 263 100% 64%;
+    --color-overlay-soft: 223 38% 16%;
+    --color-overlay-strong: 274 86% 62%;
 
-    --color-glass-surface: hsla(247, 42%, 14%, 0.68);
-    --color-glass-hover: hsla(250, 48%, 22%, 0.74);
-    --color-glass-border: hsla(265, 70%, 52%, 0.45);
+    --color-glass-surface: hsla(223, 42%, 18%, 0.78);
+    --color-glass-hover: hsla(223, 42%, 26%, 0.82);
+    --color-glass-border: hsla(201, 92%, 65%, 0.35);
 
-    --shadow-color: 246 42% 10%;
-    --shadow-glow: 264 100% 72%;
+    --shadow-color: 222 55% 7%;
+    --shadow-glow: 274 96% 70%;
   }
 
   * {
@@ -111,9 +111,20 @@
   body {
     @apply bg-bg-canvas text-fg-default font-sans antialiased;
     min-height: 100vh;
-  background-image: radial-gradient(circle at top, hsl(var(--color-accent-gradient-from) / 0.12), transparent 55%), radial-gradient(circle at 20% 20%, hsl(var(--color-accent-gradient-to) / 0.08), transparent 45%);
+    background-color: hsl(var(--color-bg-canvas));
+    background-image:
+      radial-gradient(circle at 18% 20%, hsl(var(--color-accent-gradient-from) / 0.25), transparent 45%),
+      radial-gradient(circle at 82% 0%, hsl(var(--color-accent-gradient-to) / 0.18), transparent 55%),
+      radial-gradient(circle at 0% 85%, hsl(var(--color-accent-gradient-from) / 0.12), transparent 55%);
     background-attachment: fixed;
     font-feature-settings: 'rlig' 1, 'calt' 1;
+  }
+
+  .dark body {
+    background-image:
+      radial-gradient(circle at 15% 15%, hsl(var(--color-accent-gradient-from) / 0.35), transparent 45%),
+      radial-gradient(circle at 90% 0%, hsl(var(--color-accent-gradient-to) / 0.35), transparent 55%),
+      radial-gradient(circle at 80% 80%, hsl(var(--color-accent-gradient-to) / 0.2), transparent 55%);
   }
 
   ::selection {
