@@ -2,6 +2,8 @@
 
 Agentic RAG demo with Foundry IQ and Microsoft Foundry Agent Service.
 
+🚀 [Live Demo](https://azure-ai-search-knowledge-retrieval.vercel.app/)
+
 ## Deploy
 
 [![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2Ffarzad528%2Fazure-ai-search-knowledge-retrieval-demo%2Fmain%2Finfra%2Fmain.json)
