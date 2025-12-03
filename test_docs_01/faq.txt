@@ -1,7 +1,0 @@
-Frequently Asked Questions
-
-Q: How do I reset my password?
-A: Click on 'Forgot Password' on the login page and follow the instructions.
-
-Q: What payment methods are accepted?
-A: We accept all major credit cards, PayPal, and wire transfers for enterprise customers.

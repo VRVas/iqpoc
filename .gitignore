@@ -28,12 +28,12 @@ next-env.d.ts
 # IDE
 .vscode/
 .idea/
+.claude/
 
 # System files
 Thumbs.db
 
 
 
-# HTTP test files - ignore all except template
+# HTTP test files
 *.http
-!foundry-knowledge-template.http
