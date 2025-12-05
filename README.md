@@ -1,4 +1,5 @@
 # Azure AI Search – Foundry IQ Demo
+<img width="1289" height="495" alt="image" src="https://github.com/user-attachments/assets/7ec01135-f72f-4113-aaaf-8b637fcf27b4" />
 
 Agentic RAG demo with Foundry IQ and Microsoft Foundry Agent Service.
 
