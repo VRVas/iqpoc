@@ -1,21 +1,19 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
-import { Send20Regular, Bot20Regular, Person20Regular, ChevronDown20Regular, ChevronUp20Regular, Settings20Regular, Dismiss20Regular, Delete20Regular, Attach20Regular, Mic20Regular, Image20Regular, ChatAdd20Regular, Code20Regular, ArrowCounterclockwise20Regular } from '@fluentui/react-icons'
+import { Send20Regular, Bot20Regular, Person20Regular, Settings20Regular, Dismiss20Regular, Code20Regular, ArrowCounterclockwise20Regular } from '@fluentui/react-icons'
 import { AgentAvatar } from '@/components/agent-avatar'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { Card, CardContent } from '@/components/ui/card'
 import { VoiceInput } from '@/components/ui/voice-input'
-import { ImageInput } from '@/components/ui/image-input'
 import { InlineCitationsText } from '@/components/inline-citations'
 import { SourceKindIcon } from '@/components/source-kind-icon'
 import { MCPToolCallDisplay } from '@/components/mcp-tool-call-display'
 import { RuntimeSettingsPanel } from '@/components/runtime-settings-panel'
 import { fetchKnowledgeBases, fetchKnowledgeSources, retrieveFromKnowledgeBase } from '../lib/api'
 import { KBViewCodeModal } from '@/components/kb-view-code-modal'
-import { processImageFile } from '@/lib/imageProcessing'
 import { useConversationStarters } from '@/lib/conversationStarters'
 import { cn, formatRelativeTime, cleanTextSnippet } from '@/lib/utils'
 import { TraceExplorer } from '@/components/trace-explorer'
@@ -51,9 +49,7 @@ type KnowledgeAgent = {
   }>
 }
 
-type MessageContent = 
-  | { type: 'text'; text: string }
-  | { type: 'image'; image: { url: string; file?: File } }
+type MessageContent = { type: 'text'; text: string }
 
 type Message = {
   id: string
@@ -120,8 +116,6 @@ export function KBPlaygroundView({ preselectedAgent }: KBPlaygroundViewProps) {
   const [agentsLoading, setAgentsLoading] = useState<boolean>(true)
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState('')
-  const [images, setImages] = useState<Array<{ id: string; dataUrl: string; status: 'processing' | 'ready' }>>([])
-  const [imageWarning, setImageWarning] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [viewCodeOpen, setViewCodeOpen] = useState(false)
@@ -337,45 +331,6 @@ export function KBPlaygroundView({ preselectedAgent }: KBPlaygroundViewProps) {
     textareaRef.current?.focus()
   }
 
-  // Image input handler
-  const handleImageSelect = async (imageUrl: string, file: File) => {
-    if (images.length >= 1) { 
-      setImageWarning('Only one image per query allowed')
-      return 
-    }
-    const id = `${Date.now()}-${Math.random().toString(36).slice(2)}`
-    setImages([{ id, dataUrl: imageUrl, status: 'processing' }])
-    try {
-      const processed = await processImageFile(file, {
-        maxLongSide: 2048,
-        targetMinShortSide: 768,
-        maxBytes: 4 * 1024 * 1024
-      })
-      setImages([{ id, dataUrl: processed.dataUrl, status: 'ready' }])
-    } catch (err) {
-      console.warn('Processing failed; converting to base64 fallback.', err)
-      try {
-        const reader = new FileReader()
-        reader.onload = () => setImages([{ id, dataUrl: reader.result as string, status: 'ready' }])
-        reader.onerror = () => setImages([])
-        reader.readAsDataURL(file)
-      } catch (inner) {
-        console.error('Fallback failed; removing image.', inner)
-        setImages([])
-      }
-    }
-  }
-
-  const handleImageRemove = (id: string) => {
-    setImages(prev => prev.filter(img => {
-      if (img.id === id && img.dataUrl.startsWith('blob:')) {
-        URL.revokeObjectURL(img.dataUrl)
-      }
-      return img.id !== id
-    }))
-    setImageWarning('')
-  }
-
   const buildKnowledgeSourceParams = () => {
     const userOverrides = runtimeSettings.knowledgeSourceParams && runtimeSettings.knowledgeSourceParams.length > 0
       ? runtimeSettings.knowledgeSourceParams
@@ -424,56 +379,11 @@ export function KBPlaygroundView({ preselectedAgent }: KBPlaygroundViewProps) {
       .filter(Boolean)
   }
 
-  const sendPrompt = async (prompt: string, imageUrl?: string) => {
+  const sendPrompt = async (prompt: string) => {
     if (!selectedAgent || isLoading) return
 
-    // If imageUrl is provided, load it and process through the same pipeline as user uploads
-    const contentParts: MessageContent[] = []
+    const contentParts: MessageContent[] = [{ type: 'text', text: prompt }]
 
-    if (imageUrl) {
-      try {
-        // Fetch the image
-        const response = await fetch(imageUrl)
-        if (!response.ok) {
-          throw new Error(`Failed to fetch image: ${response.status}`)
-        }
-        const blob = await response.blob()
-
-        // Convert blob to File for processing
-        const fileName = imageUrl.split('/').pop() || 'image.png'
-        const file = new File([blob], fileName, { type: blob.type || 'image/png' })
-
-        // Process through the same pipeline as user-uploaded images
-        // This ensures proper resizing, compression, and format conversion
-        const processed = await processImageFile(file, {
-          maxLongSide: 2048,
-          targetMinShortSide: 768,
-          maxBytes: 4 * 1024 * 1024
-        })
-
-        contentParts.push({ type: 'image', image: { url: processed.dataUrl } })
-      } catch (error) {
-        console.error('Failed to load/process image:', error)
-        // Fallback: try basic conversion if processImageFile fails
-        try {
-          const response = await fetch(imageUrl)
-          const blob = await response.blob()
-          const reader = new FileReader()
-          const dataUrl = await new Promise<string>((resolve, reject) => {
-            reader.onload = () => resolve(reader.result as string)
-            reader.onerror = reject
-            reader.readAsDataURL(blob)
-          })
-          contentParts.push({ type: 'image', image: { url: dataUrl } })
-        } catch (fallbackError) {
-          console.error('Fallback image conversion also failed:', fallbackError)
-        }
-      }
-    }
-    
-    contentParts.push({ type: 'text', text: prompt })
-    
-    // Set input and submit immediately
     const userMessage: Message = {
       id: Date.now().toString(),
       role: 'user',
@@ -485,20 +395,14 @@ export function KBPlaygroundView({ preselectedAgent }: KBPlaygroundViewProps) {
     setIsLoading(true)
 
     try {
-      const convertContent = async (c: MessageContent) => {
-        if (c.type === 'text') return { type: 'text', text: c.text }
-        if (c.type === 'image') return { type: 'image', image: { url: c.image.url } }
-        return c as any
-      }
-
       const azureMessages = [
-        ...await Promise.all(messages.map(async (m) => ({
+        ...messages.map((m) => ({
           role: m.role as 'user' | 'assistant' | 'system',
-          content: await Promise.all(m.content.map(convertContent))
-        }))),
+          content: m.content.map(c => ({ type: 'text', text: c.text }))
+        })),
         {
           role: 'user' as const,
-          content: await Promise.all(contentParts.map(convertContent))
+          content: contentParts.map(c => ({ type: 'text', text: c.text }))
         }
       ]
 
@@ -637,17 +541,9 @@ export function KBPlaygroundView({ preselectedAgent }: KBPlaygroundViewProps) {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if ((!input.trim() && images.length === 0) || !selectedAgent || isLoading) return
-    if (images.some(i => i.status === 'processing')) {
-      setImageWarning('Please wait for image processing to finish')
-      return
-    }
+    if (!input.trim() || !selectedAgent || isLoading) return
 
-    const contentParts: MessageContent[] = []
-    for (const img of images) {
-      contentParts.push({ type: 'image', image: { url: img.dataUrl } })
-    }
-    if (input.trim()) contentParts.push({ type: 'text', text: input })
+    const contentParts: MessageContent[] = [{ type: 'text', text: input }]
 
     const userMessage: Message = {
       id: Date.now().toString(),
@@ -658,25 +554,17 @@ export function KBPlaygroundView({ preselectedAgent }: KBPlaygroundViewProps) {
 
     setMessages(prev => [...prev, userMessage])
     setInput('')
-    setImages([])
-    setImageWarning('')
     setIsLoading(true)
 
     try {
-      const convertContent = async (c: MessageContent) => {
-        if (c.type === 'text') return { type: 'text', text: c.text }
-        if (c.type === 'image') return { type: 'image', image: { url: c.image.url } }
-        return c as any
-      }
-
       const azureMessages = [
-        ...await Promise.all(messages.map(async (m) => ({
+        ...messages.map((m) => ({
           role: m.role as 'user' | 'assistant' | 'system',
-          content: await Promise.all(m.content.map(convertContent))
-        }))),
+          content: m.content.map(c => ({ type: 'text', text: c.text }))
+        })),
         {
           role: 'user' as const,
-          content: await Promise.all(contentParts.map(convertContent))
+          content: contentParts.map(c => ({ type: 'text', text: c.text }))
         }
       ]
 
@@ -888,25 +776,16 @@ export function KBPlaygroundView({ preselectedAgent }: KBPlaygroundViewProps) {
                 </div>
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4 max-w-5xl mx-auto">
-                  {starters.map((s, idx) => {
-                    const requiresImage = s.prompt.toLowerCase().includes('upload') || s.imageUrl
-                    const hasPreloadedImage = !!s.imageUrl
-                    return (
+                  {starters.map((s, idx) => (
                       <Card
                         key={idx}
                         className={cn('relative cursor-pointer hover:elevation-sm hover:scale-105 transition-all duration-150 bg-bg-card border border-stroke-divider active:scale-95')}
-                        onClick={() => sendPrompt(s.prompt, s.imageUrl)}
+                        onClick={() => sendPrompt(s.prompt)}
                       >
                         <CardContent className="p-4 text-left space-y-2">
                           <div className="flex items-center justify-between">
                             <div className="text-[11px] uppercase tracking-wide text-fg-muted font-medium">{s.complexity}</div>
                             <div className="flex items-center gap-1">
-                              {requiresImage && (
-                                <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 dark:bg-slate-800/50 dark:text-slate-300 flex items-center gap-1">
-                                  <Attach20Regular className="h-3 w-3" />
-                                  Image
-                                </span>
-                              )}
                               {s.complexity === 'Advanced' && <span className="text-[10px] px-1.5 py-0.5 rounded bg-accent-subtle text-accent">Multi-source</span>}
                             </div>
                           </div>
@@ -914,8 +793,8 @@ export function KBPlaygroundView({ preselectedAgent }: KBPlaygroundViewProps) {
                           <p className="text-xs text-fg-muted leading-snug">{s.prompt}</p>
                         </CardContent>
                       </Card>
-                    )
-                  })}
+                    ))}
+
                 </div>
               )}
             </div>
@@ -945,35 +824,6 @@ export function KBPlaygroundView({ preselectedAgent }: KBPlaygroundViewProps) {
         {/* Input */}
         <div className="border-t border-stroke-divider p-6">
           <form onSubmit={handleSubmit} className="space-y-4">
-            {/* Image thumbnails */}
-            {images.length > 0 && (
-              <div className="flex flex-wrap gap-3">
-                {images.map(img => (
-                  <div key={img.id} className="relative">
-                    <img
-                      src={img.dataUrl}
-                      alt="attachment"
-                      className={cn('h-20 w-20 object-cover rounded border border-stroke-divider', img.status==='processing' && 'opacity-60 animate-pulse')}
-                    />
-                    <button
-                      type="button"
-                      onClick={() => handleImageRemove(img.id)}
-                      className="absolute -top-2 -right-2 h-6 w-6 rounded-full bg-bg-card border border-stroke-divider flex items-center justify-center text-fg-muted hover:text-fg-default"
-                      aria-label="Remove image"
-                    >
-                      <Dismiss20Regular className="h-3 w-3" />
-                    </button>
-                    {img.status === 'processing' && (
-                      <div className="absolute inset-0 flex items-center justify-center text-[10px] font-medium text-fg-muted bg-bg-card/40 backdrop-blur-sm rounded">…</div>
-                    )}
-                  </div>
-                ))}
-                {imageWarning && (
-                  <div className="text-[10px] text-status-warning font-medium self-end pb-1">{imageWarning}</div>
-                )}
-              </div>
-            )}
-
             <div className="relative">
               <Textarea
                 ref={textareaRef}
@@ -981,7 +831,7 @@ export function KBPlaygroundView({ preselectedAgent }: KBPlaygroundViewProps) {
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={handleKeyDown}
                 placeholder="Ask a question to test your knowledge base..."
-                className="min-h-[60px] max-h-[200px] resize-none pr-32"
+                className="min-h-[60px] max-h-[200px] resize-none pr-24"
                 disabled={isLoading}
               />
               <div className="absolute bottom-3 right-3 flex gap-1">
@@ -989,22 +839,18 @@ export function KBPlaygroundView({ preselectedAgent }: KBPlaygroundViewProps) {
                   onTranscript={handleVoiceInput}
                   disabled={isLoading}
                 />
-                <ImageInput
-                  onImageSelect={handleImageSelect}
-                  disabled={isLoading || images.length >= 1}
-                />
                 <Button
                   type="submit"
                   size="icon"
                   className="h-8 w-8"
-                  disabled={(!input.trim() && images.length === 0) || isLoading || images.some(i => i.status==='processing')}
+                  disabled={!input.trim() || isLoading}
                 >
                   <Send20Regular className="h-4 w-4" />
                 </Button>
               </div>
             </div>
             <p className="text-xs text-fg-muted">
-              Press Enter to send, Shift+Enter for new line. Click mic for voice input or image icon to add an image.
+              Press Enter to send, Shift+Enter for new line. Click mic for voice input.
             </p>
           </form>
         </div>
@@ -1143,32 +989,17 @@ function MessageBubble({ message, agent, showCostEstimates }: { message: Message
             : 'bg-bg-card border border-stroke-divider'
         )}>
           <div className="prose prose-sm max-w-none space-y-3 overflow-x-auto">
-            {message.content.map((content, index) => {
-              if (content.type === 'text') {
-                return (
-                  <p key={index} className="whitespace-pre-wrap break-words">
-                    <InlineCitationsText
-                      text={content.text}
-                      references={message.references}
-                      activity={message.activity}
-                      messageId={message.id}
-                      onActivate={() => {}}
-                    />
-                  </p>
-                )
-              } else if (content.type === 'image') {
-                return (
-                  <div key={index} className="max-w-xs">
-                    <img 
-                      src={content.image.url} 
-                      alt="User uploaded content" 
-                      className="rounded border border-stroke-divider max-w-full h-auto"
-                    />
-                  </div>
-                )
-              }
-              return null
-            })}
+            {message.content.map((content, index) => (
+              <p key={index} className="whitespace-pre-wrap break-words">
+                <InlineCitationsText
+                  text={content.text}
+                  references={message.references}
+                  activity={message.activity}
+                  messageId={message.id}
+                  onActivate={() => {}}
+                />
+              </p>
+            ))}
           </div>
 
           {/* New Trace Explorer UI */}
@@ -1176,7 +1007,7 @@ function MessageBubble({ message, agent, showCostEstimates }: { message: Message
             <div className="mt-4 pt-4 border-t border-stroke-divider">
               <TraceExplorer
                 response={{
-                  response: [{ role: 'assistant', content: message.content.map(c => c.type === 'text' ? { type: 'text', text: c.text } : { type: 'image', image: { url: c.image.url } }) }],
+                  response: [{ role: 'assistant', content: message.content.map(c => ({ type: 'text', text: c.text })) }],
                   activity: message.activity as any || [],
                   references: message.references as any || []
                 }}

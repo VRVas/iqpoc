@@ -20,7 +20,6 @@ export interface ConversationStarter {
   prompt: string
   complexity: StarterComplexity
   tags?: string[]
-  imageUrl?: string // Optional pre-loaded image for the prompt
 }
 
 export interface ConversationStarterSet {

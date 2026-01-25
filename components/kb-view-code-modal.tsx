@@ -5,9 +5,7 @@ import { Dismiss20Regular, Copy20Regular, Checkmark20Regular } from '@fluentui/r
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 
-type MessageContent =
-  | { type: 'text'; text: string }
-  | { type: 'image'; image: { url: string; file?: File } }
+type MessageContent = { type: 'text'; text: string }
 
 type Message = {
   id: string
@@ -117,14 +115,7 @@ export function KBViewCodeModal({ isOpen, onClose, agentId, agentName, messages,
   const formatMessagesForAPI = (msgs: Message[]) => {
     return msgs.map(msg => ({
       role: msg.role,
-      content: msg.content.map(c => {
-        if (c.type === 'text') {
-          return { type: 'text', text: c.text }
-        } else if (c.type === 'image') {
-          return { type: 'image', image: { url: c.image.url } }
-        }
-        return c
-      })
+      content: msg.content.map(c => ({ type: 'text', text: c.text }))
     }))
   }
 
@@ -469,10 +460,7 @@ retrieveFromAgent().catch(console.error);`
   const generateDotNetCode = () => {
     const messagesFormatted = messages.map(msg => {
       const contentFormatted = msg.content.map(c => {
-        if (c.type === 'text') {
-          return `                    new MessageContent { Type = "text", Text = ${JSON.stringify(c.text)} }`
-        }
-        return `                    new MessageContent { Type = "image", Image = new { Url = ${JSON.stringify(c.image.url)} } }`
+        return `                    new MessageContent { Type = "text", Text = ${JSON.stringify(c.text)} }`
       }).join(',\n')
 
       return `            new Message
@@ -611,14 +599,9 @@ if (response.Activity != null && response.Activity.Any())
   const generateJavaCode = () => {
     const messagesFormatted = messages.map((msg, idx) => {
       const contentItems = msg.content.map((c, cidx) => {
-        if (c.type === 'text') {
-          return `                new MessageContent()
+        return `                new MessageContent()
                     .setType("text")
                     .setText(${JSON.stringify(c.text)})`
-        }
-        return `                new MessageContent()
-                    .setType("image")
-                    .setImage(new ImageContent().setUrl(${JSON.stringify(c.image.url)}))`
       }).join(',\n')
 
       return `            new Message()

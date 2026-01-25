@@ -35,11 +35,11 @@
           "tags": ["risk-analysis", "investment-types"]
         },
         {
-          "id": "fact-sheet-analysis",
-          "label": "Fact Sheet Analysis with Image",
-          "prompt": "Upload a screenshot of a mutual fund fact sheet (e.g., fee table) and ask: Summarize the key risks and expense ratio from this document, and explain how it differs from the 10-K risk disclosure.",
+          "id": "portfolio-diversification",
+          "label": "Portfolio Diversification Strategy",
+          "prompt": "Based on current market conditions, what diversification strategy would you recommend for a retirement portfolio with a 15-year horizon?",
           "complexity": "Advanced",
-          "tags": ["multi-source", "image-upload", "fact-sheet"]
+          "tags": ["multi-source", "portfolio", "strategy"]
         }
       ]
     },
@@ -61,11 +61,11 @@
           "tags": ["guidelines", "sterilization", "cdc"]
         },
         {
-          "id": "drug-label-comparison",
-          "label": "Drug Label Dosage Comparison with Image",
-          "prompt": "Upload a photo of a drug label and ask: Extract the dosage instructions from this label and compare with the DailyMed version. Are they consistent?",
+          "id": "drug-interaction-check",
+          "label": "Drug Interaction Analysis",
+          "prompt": "What are the potential drug interactions between Albuterol and common blood pressure medications? Include severity levels and recommendations.",
           "complexity": "Advanced",
-          "tags": ["multi-source", "image-upload", "dosage"]
+          "tags": ["multi-source", "interactions", "medications"]
         }
       ]
     },
@@ -87,11 +87,11 @@
           "tags": ["directives", "compliance", "aviation"]
         },
         {
-          "id": "faa-directive-analysis",
-          "label": "FAA Directive Analysis with Image",
-          "prompt": "Upload a photo of an FAA Airworthiness Directive header page and ask: Identify this directive, check if it has been superseded, and summarize the compliance steps.",
+          "id": "maintenance-schedule",
+          "label": "Maintenance Schedule Optimization",
+          "prompt": "Based on the EMB-120 maintenance requirements and current Airworthiness Directives, what would be an optimal maintenance schedule to minimize aircraft downtime?",
           "complexity": "Advanced",
-          "tags": ["multi-source", "image-upload", "directives"]
+          "tags": ["multi-source", "maintenance", "optimization"]
         }
       ]
     },
@@ -140,11 +140,10 @@
         },
         {
           "id": "zava-supply-chain-analysis",
-          "label": "Supply Chain Analysis with Image",
-          "prompt": "Here is an image of Zava's global production and distribution map. Using the image AND the Zava knowledge base, explain how the supply chain works end-to-end. Then identify which of these facilities would face the biggest operational risk during a major marathon weekend in the same city (e.g., St. Louis or Seattle), using marathon road-closure data. Recommend adjustments to shipping or staffing based on both the supply-chain map and the city marathon constraints.",
+          "label": "Supply Chain Risk Analysis",
+          "prompt": "Using the Zava knowledge base, explain how the supply chain works end-to-end. Then identify which facilities would face the biggest operational risk during a major marathon weekend in a city like St. Louis or Seattle, using marathon road-closure data. Recommend adjustments to shipping or staffing.",
           "complexity": "Advanced",
-          "tags": ["multi-source", "image-upload", "supply-chain", "marathon"],
-          "imageUrl": "/icons/zava-sample-img.png"
+          "tags": ["multi-source", "supply-chain", "marathon"]
         }
       ]
     }
