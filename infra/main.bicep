@@ -67,7 +67,7 @@ var skuMap = {
     search: 'basic'
     openai: 'S0'
     storage: 'Standard_LRS'
-    staticWebApp: 'Free'
+    staticWebApp: 'Standard'
   }
   staging: {
     search: 'standard'
