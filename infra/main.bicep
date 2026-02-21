@@ -17,6 +17,16 @@ param location string = resourceGroup().location
 ])
 param environment string = 'dev'
 
+@description('Location for the Static Web App (must be one of: westus2, centralus, eastus2, westeurope, eastasia)')
+@allowed([
+  'westus2'
+  'centralus'
+  'eastus2'
+  'westeurope'
+  'eastasia'
+])
+param staticWebAppLocation string = 'eastus2'
+
 @description('GitHub repository URL for Static Web App')
 param repositoryUrl string = 'https://github.com/VRVas/iqpoc'
 
@@ -206,7 +216,7 @@ module staticWebApp 'modules/staticwebapp.bicep' = {
   name: 'deploy-staticwebapp'
   params: {
     staticWebAppName: resourceNames.staticWebApp
-    location: location
+    location: staticWebAppLocation
     sku: skuMap[environment].staticWebApp
     tags: tags
     repositoryUrl: repositoryUrl

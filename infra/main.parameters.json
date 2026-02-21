@@ -11,6 +11,9 @@
     "environment": {
       "value": "dev"
     },
+    "staticWebAppLocation": {
+      "value": "eastus2"
+    },
     "repositoryUrl": {
       "value": "https://github.com/VRVas/iqpoc"
     },
