@@ -13,7 +13,7 @@
 **Git Information:**
 - Current Branch: `main`
 - Main Branch: `main` (use for PRs)
-- Repository: `https://github.com/farzad528/azure-ai-search-knowledge-retrieval-demo`
+- Repository: `https://github.com/VRVas/iqpoc`
 
 **What This Project Is:**
 - Production-ready Next.js application (Foundry IQ Demo) for Azure AI Search Knowledge Retrieval
@@ -171,8 +171,8 @@
 
 ```bash
 # Clone repository
-git clone https://github.com/farzad528/azure-ai-search-knowledge-retrieval-demo.git
-cd azure-ai-search-knowledge-retrieval-demo
+git clone https://github.com/VRVas/iqpoc.git
+cd iqpoc
 
 # Install dependencies
 npm install
@@ -758,8 +758,8 @@ npm run build && npm start
 - [Azure AI Foundry Docs](https://learn.microsoft.com/azure/ai-services/agents/)
 
 **Getting Help:**
-- GitHub Issues: https://github.com/farzad528/azure-ai-search-knowledge-retrieval-demo/issues
-- GitHub Discussions: https://github.com/farzad528/azure-ai-search-knowledge-retrieval-demo/discussions
+- GitHub Issues: https://github.com/VRVas/iqpoc/issues
+- GitHub Discussions: https://github.com/VRVas/iqpoc/discussions
 
 ---
 

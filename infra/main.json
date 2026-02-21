@@ -39,7 +39,7 @@
     },
     "repositoryUrl": {
       "type": "string",
-      "defaultValue": "https://github.com/farzad528/azure-ai-search-knowledge-retrieval-demo",
+      "defaultValue": "https://github.com/VRVas/iqpoc",
       "metadata": {
         "description": "GitHub repository URL for Static Web App"
       }

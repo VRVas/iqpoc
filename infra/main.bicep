@@ -18,7 +18,7 @@ param location string = resourceGroup().location
 param environment string = 'dev'
 
 @description('GitHub repository URL for Static Web App')
-param repositoryUrl string = 'https://github.com/farzad528/azure-ai-search-knowledge-retrieval-demo'
+param repositoryUrl string = 'https://github.com/VRVas/iqpoc'
 
 @description('GitHub repository branch')
 param branch string = 'main'
