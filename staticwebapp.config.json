@@ -5,13 +5,18 @@
       "allowedRoles": ["anonymous"]
     }
   ],
-  "navigationFallback": {
-    "rewrite": "/index.html"
+  "responseOverrides": {
+    "401": {
+      "statusCode": 302,
+      "redirect": "/"
+    }
   },
   "platform": {
     "apiRuntime": "node:18"
   },
-  "networking": {
-    "allowedIpRanges": ["0.0.0.0/0", "::/0"]
+  "globalHeaders": {
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+    "Access-Control-Allow-Headers": "*"
   }
 }
