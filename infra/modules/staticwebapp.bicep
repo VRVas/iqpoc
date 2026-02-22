@@ -50,6 +50,7 @@ resource staticWebApp 'Microsoft.Web/staticSites@2023-01-01' = {
     repositoryToken: repositoryToken
     buildProperties: buildProperties
     provider: 'GitHub'
+    publicNetworkAccess: 'Enabled'
     stagingEnvironmentPolicy: 'Enabled'
     allowConfigFileUpdates: true
     enterpriseGradeCdnStatus: 'Disabled'

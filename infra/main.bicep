@@ -101,6 +101,8 @@ var tags = {
   environment: environment
   solution: 'Azure AI Search Knowledge Retrieval'
   managedBy: 'Bicep'
+  SecurityControl: 'Ignore'
+  SecurityGroup: 'Ignore'
 }
 
 // Model version and capacity mappings

@@ -19,7 +19,7 @@ param sku string = 'basic'
 @description('Tags for the search service')
 param tags object = {}
 
-resource searchService 'Microsoft.Search/searchServices@2023-11-01' = {
+resource searchService 'Microsoft.Search/searchServices@2024-03-01-preview' = {
   name: searchServiceName
   location: location
   tags: tags
@@ -31,7 +31,17 @@ resource searchService 'Microsoft.Search/searchServices@2023-11-01' = {
     partitionCount: 1
     replicaCount: 1
     publicNetworkAccess: 'enabled'
+    disableLocalAuth: false
+    authOptions: {
+      aadOrApiKey: {
+        aadAuthFailureMode: 'http401WithBearerChallenge'
+      }
+    }
     semanticSearch: 'free'
+    corsOptions: {
+      allowedOrigins: ['*']
+      maxAgeInSeconds: 3600
+    }
   }
 }
 

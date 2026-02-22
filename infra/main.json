@@ -4,8 +4,8 @@
   "metadata": {
     "_generator": {
       "name": "bicep",
-      "version": "0.38.33.27573",
-      "templateHash": "6313061430549261828"
+      "version": "0.33.93.31351",
+      "templateHash": "13444198865962825178"
     }
   },
   "parameters": {
@@ -142,7 +142,9 @@
     "tags": {
       "environment": "[parameters('environment')]",
       "solution": "Azure AI Search Knowledge Retrieval",
-      "managedBy": "Bicep"
+      "managedBy": "Bicep",
+      "SecurityControl": "Ignore",
+      "SecurityGroup": "Ignore"
     },
     "chatModelConfig": {
       "gpt-4o": {
@@ -196,7 +198,7 @@
   "resources": [
     {
       "type": "Microsoft.Resources/deployments",
-      "apiVersion": "2025-04-01",
+      "apiVersion": "2022-09-01",
       "name": "deploy-search",
       "properties": {
         "expressionEvaluationOptions": {
@@ -223,8 +225,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.38.33.27573",
-              "templateHash": "5294857793062549890"
+              "version": "0.33.93.31351",
+              "templateHash": "15875991996995740009"
             }
           },
           "parameters": {
@@ -267,7 +269,7 @@
           "resources": [
             {
               "type": "Microsoft.Search/searchServices",
-              "apiVersion": "2023-11-01",
+              "apiVersion": "2024-03-01-preview",
               "name": "[parameters('searchServiceName')]",
               "location": "[parameters('location')]",
               "tags": "[parameters('tags')]",
@@ -279,7 +281,19 @@
                 "partitionCount": 1,
                 "replicaCount": 1,
                 "publicNetworkAccess": "enabled",
-                "semanticSearch": "free"
+                "disableLocalAuth": false,
+                "authOptions": {
+                  "aadOrApiKey": {
+                    "aadAuthFailureMode": "http401WithBearerChallenge"
+                  }
+                },
+                "semanticSearch": "free",
+                "corsOptions": {
+                  "allowedOrigins": [
+                    "*"
+                  ],
+                  "maxAgeInSeconds": 3600
+                }
               }
             }
           ],
@@ -298,7 +312,7 @@
             },
             "searchAdminKey": {
               "type": "string",
-              "value": "[listAdminKeys(resourceId('Microsoft.Search/searchServices', parameters('searchServiceName')), '2023-11-01').primaryKey]"
+              "value": "[listAdminKeys(resourceId('Microsoft.Search/searchServices', parameters('searchServiceName')), '2024-03-01-preview').primaryKey]"
             }
           }
         }
@@ -306,7 +320,7 @@
     },
     {
       "type": "Microsoft.Resources/deployments",
-      "apiVersion": "2025-04-01",
+      "apiVersion": "2022-09-01",
       "name": "deploy-openai",
       "properties": {
         "expressionEvaluationOptions": {
@@ -357,8 +371,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.38.33.27573",
-              "templateHash": "17010784144092326323"
+              "version": "0.33.93.31351",
+              "templateHash": "142345357539986434"
             }
           },
           "parameters": {
@@ -463,8 +477,11 @@
               "properties": {
                 "customSubDomainName": "[parameters('openAIName')]",
                 "publicNetworkAccess": "Enabled",
+                "disableLocalAuth": false,
                 "networkAcls": {
-                  "defaultAction": "Allow"
+                  "defaultAction": "Allow",
+                  "ipRules": [],
+                  "virtualNetworkRules": []
                 }
               }
             },
@@ -539,7 +556,7 @@
     },
     {
       "type": "Microsoft.Resources/deployments",
-      "apiVersion": "2025-04-01",
+      "apiVersion": "2022-09-01",
       "name": "deploy-storage",
       "properties": {
         "expressionEvaluationOptions": {
@@ -569,8 +586,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.38.33.27573",
-              "templateHash": "10746232780939829241"
+              "version": "0.33.93.31351",
+              "templateHash": "11926911542527965382"
             }
           },
           "parameters": {
@@ -630,6 +647,8 @@
               "properties": {
                 "accessTier": "Hot",
                 "allowBlobPublicAccess": false,
+                "allowSharedKeyAccess": true,
+                "publicNetworkAccess": "Enabled",
                 "minimumTlsVersion": "TLS1_2",
                 "supportsHttpsTrafficOnly": true,
                 "encryption": {
@@ -653,6 +672,140 @@
                 "deleteRetentionPolicy": {
                   "enabled": true,
                   "days": 7
+                },
+                "cors": {
+                  "corsRules": [
+                    {
+                      "allowedOrigins": [
+                        "*"
+                      ],
+                      "allowedMethods": [
+                        "GET",
+                        "HEAD",
+                        "PUT",
+                        "POST",
+                        "DELETE",
+                        "OPTIONS",
+                        "MERGE",
+                        "PATCH"
+                      ],
+                      "allowedHeaders": [
+                        "*"
+                      ],
+                      "exposedHeaders": [
+                        "*"
+                      ],
+                      "maxAgeInSeconds": 3600
+                    }
+                  ]
+                }
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccountName'))]"
+              ]
+            },
+            {
+              "type": "Microsoft.Storage/storageAccounts/fileServices",
+              "apiVersion": "2023-01-01",
+              "name": "[format('{0}/{1}', parameters('storageAccountName'), 'default')]",
+              "properties": {
+                "cors": {
+                  "corsRules": [
+                    {
+                      "allowedOrigins": [
+                        "*"
+                      ],
+                      "allowedMethods": [
+                        "GET",
+                        "HEAD",
+                        "PUT",
+                        "POST",
+                        "DELETE",
+                        "OPTIONS",
+                        "MERGE",
+                        "PATCH"
+                      ],
+                      "allowedHeaders": [
+                        "*"
+                      ],
+                      "exposedHeaders": [
+                        "*"
+                      ],
+                      "maxAgeInSeconds": 3600
+                    }
+                  ]
+                }
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccountName'))]"
+              ]
+            },
+            {
+              "type": "Microsoft.Storage/storageAccounts/queueServices",
+              "apiVersion": "2023-01-01",
+              "name": "[format('{0}/{1}', parameters('storageAccountName'), 'default')]",
+              "properties": {
+                "cors": {
+                  "corsRules": [
+                    {
+                      "allowedOrigins": [
+                        "*"
+                      ],
+                      "allowedMethods": [
+                        "GET",
+                        "HEAD",
+                        "PUT",
+                        "POST",
+                        "DELETE",
+                        "OPTIONS",
+                        "MERGE",
+                        "PATCH"
+                      ],
+                      "allowedHeaders": [
+                        "*"
+                      ],
+                      "exposedHeaders": [
+                        "*"
+                      ],
+                      "maxAgeInSeconds": 3600
+                    }
+                  ]
+                }
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccountName'))]"
+              ]
+            },
+            {
+              "type": "Microsoft.Storage/storageAccounts/tableServices",
+              "apiVersion": "2023-01-01",
+              "name": "[format('{0}/{1}', parameters('storageAccountName'), 'default')]",
+              "properties": {
+                "cors": {
+                  "corsRules": [
+                    {
+                      "allowedOrigins": [
+                        "*"
+                      ],
+                      "allowedMethods": [
+                        "GET",
+                        "HEAD",
+                        "PUT",
+                        "POST",
+                        "DELETE",
+                        "OPTIONS",
+                        "MERGE",
+                        "PATCH"
+                      ],
+                      "allowedHeaders": [
+                        "*"
+                      ],
+                      "exposedHeaders": [
+                        "*"
+                      ],
+                      "maxAgeInSeconds": 3600
+                    }
+                  ]
                 }
               },
               "dependsOn": [
@@ -702,7 +855,7 @@
     },
     {
       "type": "Microsoft.Resources/deployments",
-      "apiVersion": "2025-04-01",
+      "apiVersion": "2022-09-01",
       "name": "deploy-foundry",
       "properties": {
         "expressionEvaluationOptions": {
@@ -723,13 +876,13 @@
             "value": "[variables('tags')]"
           },
           "openAIResourceId": {
-            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'deploy-openai'), '2025-04-01').outputs.openAIId.value]"
+            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'deploy-openai'), '2022-09-01').outputs.openAIId.value]"
           },
           "searchResourceId": {
-            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'deploy-search'), '2025-04-01').outputs.searchServiceId.value]"
+            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'deploy-search'), '2022-09-01').outputs.searchServiceId.value]"
           },
           "storageAccountId": {
-            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'deploy-storage'), '2025-04-01').outputs.storageAccountId.value]"
+            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'deploy-storage'), '2022-09-01').outputs.storageAccountId.value]"
           }
         },
         "template": {
@@ -738,8 +891,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.38.33.27573",
-              "templateHash": "7074958133617667931"
+              "version": "0.33.93.31351",
+              "templateHash": "14847575699212472723"
             }
           },
           "parameters": {
@@ -902,7 +1055,7 @@
     },
     {
       "type": "Microsoft.Resources/deployments",
-      "apiVersion": "2025-04-01",
+      "apiVersion": "2022-09-01",
       "name": "deploy-staticwebapp",
       "properties": {
         "expressionEvaluationOptions": {
@@ -938,8 +1091,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.38.33.27573",
-              "templateHash": "12097102036641970586"
+              "version": "0.33.93.31351",
+              "templateHash": "1319580889929969497"
             }
           },
           "parameters": {
@@ -1028,6 +1181,7 @@
                 "repositoryToken": "[parameters('repositoryToken')]",
                 "buildProperties": "[parameters('buildProperties')]",
                 "provider": "GitHub",
+                "publicNetworkAccess": "Enabled",
                 "stagingEnvironmentPolicy": "Enabled",
                 "allowConfigFileUpdates": true,
                 "enterpriseGradeCdnStatus": "Disabled"
@@ -1067,76 +1221,76 @@
     },
     "searchEndpoint": {
       "type": "string",
-      "value": "[reference(resourceId('Microsoft.Resources/deployments', 'deploy-search'), '2025-04-01').outputs.searchEndpoint.value]"
+      "value": "[reference(resourceId('Microsoft.Resources/deployments', 'deploy-search'), '2022-09-01').outputs.searchEndpoint.value]"
     },
     "searchServiceName": {
       "type": "string",
-      "value": "[reference(resourceId('Microsoft.Resources/deployments', 'deploy-search'), '2025-04-01').outputs.searchServiceName.value]"
+      "value": "[reference(resourceId('Microsoft.Resources/deployments', 'deploy-search'), '2022-09-01').outputs.searchServiceName.value]"
     },
     "searchAdminKey": {
       "type": "string",
-      "value": "[reference(resourceId('Microsoft.Resources/deployments', 'deploy-search'), '2025-04-01').outputs.searchAdminKey.value]"
+      "value": "[reference(resourceId('Microsoft.Resources/deployments', 'deploy-search'), '2022-09-01').outputs.searchAdminKey.value]"
     },
     "openAIEndpoint": {
       "type": "string",
-      "value": "[reference(resourceId('Microsoft.Resources/deployments', 'deploy-openai'), '2025-04-01').outputs.openAIEndpoint.value]"
+      "value": "[reference(resourceId('Microsoft.Resources/deployments', 'deploy-openai'), '2022-09-01').outputs.openAIEndpoint.value]"
     },
     "openAIKey": {
       "type": "string",
-      "value": "[reference(resourceId('Microsoft.Resources/deployments', 'deploy-openai'), '2025-04-01').outputs.openAIKey.value]"
+      "value": "[reference(resourceId('Microsoft.Resources/deployments', 'deploy-openai'), '2022-09-01').outputs.openAIKey.value]"
     },
     "embeddingDeploymentName": {
       "type": "string",
-      "value": "[reference(resourceId('Microsoft.Resources/deployments', 'deploy-openai'), '2025-04-01').outputs.embeddingDeploymentName.value]"
+      "value": "[reference(resourceId('Microsoft.Resources/deployments', 'deploy-openai'), '2022-09-01').outputs.embeddingDeploymentName.value]"
     },
     "chatDeploymentName": {
       "type": "string",
-      "value": "[reference(resourceId('Microsoft.Resources/deployments', 'deploy-openai'), '2025-04-01').outputs.chatDeploymentName.value]"
+      "value": "[reference(resourceId('Microsoft.Resources/deployments', 'deploy-openai'), '2022-09-01').outputs.chatDeploymentName.value]"
     },
     "storageAccountName": {
       "type": "string",
-      "value": "[reference(resourceId('Microsoft.Resources/deployments', 'deploy-storage'), '2025-04-01').outputs.storageAccountName.value]"
+      "value": "[reference(resourceId('Microsoft.Resources/deployments', 'deploy-storage'), '2022-09-01').outputs.storageAccountName.value]"
     },
     "storageConnectionString": {
       "type": "string",
-      "value": "[reference(resourceId('Microsoft.Resources/deployments', 'deploy-storage'), '2025-04-01').outputs.storageConnectionString.value]"
+      "value": "[reference(resourceId('Microsoft.Resources/deployments', 'deploy-storage'), '2022-09-01').outputs.storageConnectionString.value]"
     },
     "sampleDataContainerName": {
       "type": "string",
-      "value": "[reference(resourceId('Microsoft.Resources/deployments', 'deploy-storage'), '2025-04-01').outputs.sampleDataContainerName.value]"
+      "value": "[reference(resourceId('Microsoft.Resources/deployments', 'deploy-storage'), '2022-09-01').outputs.sampleDataContainerName.value]"
     },
     "foundryProjectEndpoint": {
       "type": "string",
-      "value": "[reference(resourceId('Microsoft.Resources/deployments', 'deploy-foundry'), '2025-04-01').outputs.projectEndpoint.value]"
+      "value": "[reference(resourceId('Microsoft.Resources/deployments', 'deploy-foundry'), '2022-09-01').outputs.projectEndpoint.value]"
     },
     "foundryProjectName": {
       "type": "string",
-      "value": "[reference(resourceId('Microsoft.Resources/deployments', 'deploy-foundry'), '2025-04-01').outputs.projectName.value]"
+      "value": "[reference(resourceId('Microsoft.Resources/deployments', 'deploy-foundry'), '2022-09-01').outputs.projectName.value]"
     },
     "foundryHubName": {
       "type": "string",
-      "value": "[reference(resourceId('Microsoft.Resources/deployments', 'deploy-foundry'), '2025-04-01').outputs.hubName.value]"
+      "value": "[reference(resourceId('Microsoft.Resources/deployments', 'deploy-foundry'), '2022-09-01').outputs.hubName.value]"
     },
     "staticWebAppUrl": {
       "type": "string",
-      "value": "[reference(resourceId('Microsoft.Resources/deployments', 'deploy-staticwebapp'), '2025-04-01').outputs.staticWebAppUrl.value]"
+      "value": "[reference(resourceId('Microsoft.Resources/deployments', 'deploy-staticwebapp'), '2022-09-01').outputs.staticWebAppUrl.value]"
     },
     "staticWebAppName": {
       "type": "string",
-      "value": "[reference(resourceId('Microsoft.Resources/deployments', 'deploy-staticwebapp'), '2025-04-01').outputs.staticWebAppName.value]"
+      "value": "[reference(resourceId('Microsoft.Resources/deployments', 'deploy-staticwebapp'), '2022-09-01').outputs.staticWebAppName.value]"
     },
     "environmentVariables": {
       "type": "object",
       "value": {
-        "AZURE_SEARCH_ENDPOINT": "[reference(resourceId('Microsoft.Resources/deployments', 'deploy-search'), '2025-04-01').outputs.searchEndpoint.value]",
-        "AZURE_SEARCH_API_KEY": "[reference(resourceId('Microsoft.Resources/deployments', 'deploy-search'), '2025-04-01').outputs.searchAdminKey.value]",
+        "AZURE_SEARCH_ENDPOINT": "[reference(resourceId('Microsoft.Resources/deployments', 'deploy-search'), '2022-09-01').outputs.searchEndpoint.value]",
+        "AZURE_SEARCH_API_KEY": "[reference(resourceId('Microsoft.Resources/deployments', 'deploy-search'), '2022-09-01').outputs.searchAdminKey.value]",
         "AZURE_SEARCH_API_VERSION": "2025-11-01-preview",
-        "NEXT_PUBLIC_AZURE_OPENAI_ENDPOINT": "[reference(resourceId('Microsoft.Resources/deployments', 'deploy-openai'), '2025-04-01').outputs.openAIEndpoint.value]",
-        "AZURE_OPENAI_API_KEY": "[reference(resourceId('Microsoft.Resources/deployments', 'deploy-openai'), '2025-04-01').outputs.openAIKey.value]",
-        "FOUNDRY_PROJECT_ENDPOINT": "[reference(resourceId('Microsoft.Resources/deployments', 'deploy-foundry'), '2025-04-01').outputs.projectEndpoint.value]",
+        "NEXT_PUBLIC_AZURE_OPENAI_ENDPOINT": "[reference(resourceId('Microsoft.Resources/deployments', 'deploy-openai'), '2022-09-01').outputs.openAIEndpoint.value]",
+        "AZURE_OPENAI_API_KEY": "[reference(resourceId('Microsoft.Resources/deployments', 'deploy-openai'), '2022-09-01').outputs.openAIKey.value]",
+        "FOUNDRY_PROJECT_ENDPOINT": "[reference(resourceId('Microsoft.Resources/deployments', 'deploy-foundry'), '2022-09-01').outputs.projectEndpoint.value]",
         "FOUNDRY_API_VERSION": "2025-05-01",
         "AZURE_AUTH_METHOD": "managed-identity",
-        "NEXT_PUBLIC_SEARCH_ENDPOINT": "[reference(resourceId('Microsoft.Resources/deployments', 'deploy-search'), '2025-04-01').outputs.searchEndpoint.value]"
+        "NEXT_PUBLIC_SEARCH_ENDPOINT": "[reference(resourceId('Microsoft.Resources/deployments', 'deploy-search'), '2022-09-01').outputs.searchEndpoint.value]"
       }
     },
     "deploymentSummary": {
@@ -1144,7 +1298,7 @@
       "value": {
         "message": "Deployment completed successfully!",
         "nextSteps": [
-          "[format('1. Visit your Static Web App at: {0}', reference(resourceId('Microsoft.Resources/deployments', 'deploy-staticwebapp'), '2025-04-01').outputs.staticWebAppUrl.value)]",
+          "[format('1. Visit your Static Web App at: {0}', reference(resourceId('Microsoft.Resources/deployments', 'deploy-staticwebapp'), '2022-09-01').outputs.staticWebAppUrl.value)]",
           "2. Configure GitHub Actions for automated deployments",
           "3. Upload sample data using the provided script",
           "4. Create your first knowledge base in the app"
