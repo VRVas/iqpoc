@@ -12,6 +12,6 @@
     "apiRuntime": "node:18"
   },
   "networking": {
-    "allowedIpRanges": []
+    "allowedIpRanges": ["0.0.0.0/0", "::/0"]
   }
 }
