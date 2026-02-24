@@ -22,6 +22,7 @@ interface QuickCreateConfig {
   folderPath?: string
   indexName?: string
   urls?: string[]
+  domains?: string[]
 }
 
 const SOURCE_TYPE_INFO = {
@@ -50,9 +51,9 @@ const SOURCE_TYPE_INFO = {
     icon: Globe20Regular,
     title: 'Web Sources',
     description: 'Crawl and index web pages',
-    requiredFields: ['urls'],
+    requiredFields: ['domains'],
     defaultValues: {
-      urls: ['https://www.fda.gov/drugs', 'https://www.cdc.gov/guidelines']
+      domains: ['www.qatarairways.com', 'dohahamadairport.com']
     }
   }
 }
@@ -95,8 +96,8 @@ function QuickCreateKnowledgeSourcePageContent() {
       return false
     }
 
-    // Connection string is optional for azureBlob (server injects it)
-    if (config.sourceType !== 'azureBlob' && !config.connectionString) {
+    // Connection string is optional for azureBlob (server injects it) and not needed for web
+    if (config.sourceType !== 'azureBlob' && config.sourceType !== 'web' && !config.connectionString) {
       return false
     }
 
@@ -188,7 +189,10 @@ function QuickCreateKnowledgeSourcePageContent() {
       case 'web':
         return {
           webParameters: {
-            urls: config.urls
+            domains: {
+              allowedDomains: config.domains || [],
+              blockedDomains: []
+            }
           }
         }
       default:
@@ -299,24 +303,26 @@ function QuickCreateKnowledgeSourcePageContent() {
                 />
               </div>
 
-              <div>
-                <label className="text-sm font-medium text-fg-secondary">
-                  Connection String <span className="text-fg-error">*</span>
-                </label>
-                <Input
-                  value={config.connectionString}
-                  onChange={(e) => setConfig({ ...config, connectionString: e.target.value })}
-                  placeholder={selectedType === 'azureBlob'
-                    ? "Leave blank to use server-configured storage, or paste a connection string"
-                    : "https://your-search.search.windows.net"}
-                  className="mt-1 font-mono text-sm"
-                />
-                <p className="text-xs text-fg-muted mt-1">
-                  {selectedType === 'azureBlob'
-                    ? "Leave blank to auto-inject the server-side storage connection string (key-based auth)"
-                    : "Your Azure AI Search endpoint URL"}
-                </p>
-              </div>
+              {selectedType !== 'web' && (
+                <div>
+                  <label className="text-sm font-medium text-fg-secondary">
+                    Connection String <span className="text-fg-error">*</span>
+                  </label>
+                  <Input
+                    value={config.connectionString}
+                    onChange={(e) => setConfig({ ...config, connectionString: e.target.value })}
+                    placeholder={selectedType === 'azureBlob'
+                      ? "Leave blank to use server-configured storage, or paste a connection string"
+                      : "https://your-search.search.windows.net"}
+                    className="mt-1 font-mono text-sm"
+                  />
+                  <p className="text-xs text-fg-muted mt-1">
+                    {selectedType === 'azureBlob'
+                      ? "Leave blank to auto-inject the server-side storage connection string (key-based auth)"
+                      : "Your Azure AI Search endpoint URL"}
+                  </p>
+                </div>
+              )}
 
               {selectedType === 'azureBlob' && (
                 <>
@@ -360,14 +366,15 @@ function QuickCreateKnowledgeSourcePageContent() {
               {selectedType === 'web' && (
                 <div>
                   <label className="text-sm font-medium text-fg-secondary">
-                    URLs to Crawl <span className="text-fg-error">*</span>
+                    Domains <span className="text-fg-error">*</span>
                   </label>
                   <textarea
-                    value={config.urls?.join('\n') || ''}
-                    onChange={(e) => setConfig({ ...config, urls: e.target.value.split('\n').filter(Boolean) })}
-                    placeholder="Enter one URL per line"
+                    value={config.domains?.join('\n') || ''}
+                    onChange={(e) => setConfig({ ...config, domains: e.target.value.split('\n').filter(Boolean) })}
+                    placeholder="Enter one domain per line (e.g. www.qatarairways.com)"
                     className="mt-1 w-full p-2 border rounded-lg text-sm h-32"
                   />
+                  <p className="text-xs text-fg-muted mt-1">Domain names only (no https:// prefix needed). Web search results will be scoped to these domains.</p>
                 </div>
               )}
 
