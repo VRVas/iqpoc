@@ -114,20 +114,24 @@ function AgentBuilderPageContent() {
         if (assistant.instructions) setAgentInstructions(assistant.instructions)
         if (assistant.model) setSelectedModel(assistant.model)
 
-        // Extract knowledge bases from MCP tools
-        if (assistant.tools) {
-          const mcpTools = assistant.tools.filter(tool => tool.type === 'mcp')
-          const kbNames = mcpTools.map(tool => {
-            // Extract knowledge base name from server_label or server_url
-            if (tool.server_label) {
-              return tool.server_label.replace(/_/g, '-')
-            }
-            // Fallback: extract from URL
-            const urlMatch = tool.server_url?.match(/\/knowledgebases\/([^\/]+)\/mcp/)
-            return urlMatch ? urlMatch[1] : null
+        // Extract knowledge bases from azure_ai_search tool_resources
+        const searchIndexes = assistant.tool_resources?.azure_ai_search?.indexes
+        if (searchIndexes && searchIndexes.length > 0) {
+          const kbNames = searchIndexes.map((idx: any) => {
+            // Strip '-index' suffix to get knowledge source / KB name
+            const name = idx.index_name || ''
+            return name.endsWith('-index') ? name.slice(0, -6) : name
           }).filter(Boolean)
-
           setSelectedKnowledgeBases(new Set(kbNames))
+        }
+
+        // Restore optional tool toggles
+        if (assistant.tools) {
+          setEnabledTools({
+            codeInterpreter: assistant.tools.some((t: any) => t.type === 'code_interpreter'),
+            fileSearch: assistant.tools.some((t: any) => t.type === 'file_search'),
+            webSearch: assistant.tools.some((t: any) => t.type === 'bing_grounding'),
+          })
         }
       } else {
         console.error('Failed to load existing assistant details')
@@ -171,25 +175,45 @@ function AgentBuilderPageContent() {
   const handleSaveAgent = async () => {
     setSaving(true)
     try {
-      // Build MCP tools from selected knowledge bases
-      const mcpTools = Array.from(selectedKnowledgeBases).map(baseName => {
-        // Replace dashes with underscores for server_label
-        const serverLabel = baseName.replace(/-/g, '_')
+      // Build tools array
+      const tools: any[] = []
 
-        return {
-          type: 'mcp',
-          server_label: serverLabel,
-          server_url: `${process.env.NEXT_PUBLIC_SEARCH_ENDPOINT}/knowledgebases/${baseName}/mcp?api-version=${process.env.NEXT_PUBLIC_AZURE_SEARCH_API_VERSION || '2025-11-01-preview'}`,
-          allowed_tools: ['knowledge_base_retrieve']
-        }
-      })
+      // Add Azure AI Search tool if knowledge bases are selected
+      if (selectedKnowledgeBases.size > 0) {
+        tools.push({ type: 'azure_ai_search' })
+      }
+
+      // Add optional tools
+      if (enabledTools.codeInterpreter) tools.push({ type: 'code_interpreter' })
+      if (enabledTools.fileSearch) tools.push({ type: 'file_search' })
+
+      // Build tool_resources for Azure AI Search indexes
+      const toolResources: any = {}
+      if (selectedKnowledgeBases.size > 0) {
+        // Each selected KB's knowledge sources map to search indexes
+        // The index name convention is {source-name}-index
+        const indexes = Array.from(selectedKnowledgeBases).flatMap(kbName => {
+          const kb = knowledgeBases.find(b => b.name === kbName)
+          if (kb?.knowledgeSources && kb.knowledgeSources.length > 0) {
+            return kb.knowledgeSources.map(src => ({
+              index_connection_id: 'aikb-search', // Server will inject from env
+              index_name: `${src.name}-index`
+            }))
+          }
+          // Fallback: use KB name itself as index prefix
+          return [{ index_connection_id: 'aikb-search', index_name: `${kbName}-index` }]
+        })
+
+        toolResources.azure_ai_search = { indexes }
+      }
 
       // Create the Foundry assistant
       const assistantData = {
         name: agentName,
         instructions: agentInstructions,
         model: selectedModel,
-        tools: mcpTools
+        tools,
+        tool_resources: Object.keys(toolResources).length > 0 ? toolResources : undefined
       }
 
       console.log('Creating assistant with data:', assistantData)
@@ -270,16 +294,8 @@ function AgentBuilderPageContent() {
         })
       })
 
-      // Create run with MCP tool resources
-      const mcpResources = Array.from(selectedKnowledgeBases).map(baseName => {
-        const serverLabel = baseName.replace(/-/g, '_')
-        return {
-          server_label: serverLabel,
-          require_approval: 'never'
-          // API key will be injected server-side
-        }
-      })
-
+      // Create run — azure_ai_search tools are configured on the assistant,
+      // so no tool_resources needed per-run
       const runResponse = await fetch('/api/foundry/runs', {
         method: 'POST',
         headers: {
@@ -287,10 +303,7 @@ function AgentBuilderPageContent() {
         },
         body: JSON.stringify({
           threadId,
-          assistantId,
-          tool_resources: {
-            mcp: mcpResources
-          }
+          assistantId
         })
       })
 
@@ -419,18 +432,29 @@ function AgentBuilderPageContent() {
     if (!assistantId) return
 
     try {
-      // Build MCP tools from selected knowledge bases
-      const mcpTools = Array.from(selectedKnowledgeBases).map(baseName => {
-        // Replace dashes with underscores for server_label
-        const serverLabel = baseName.replace(/-/g, '_')
+      // Build tools array
+      const tools: any[] = []
+      if (selectedKnowledgeBases.size > 0) {
+        tools.push({ type: 'azure_ai_search' })
+      }
+      if (enabledTools.codeInterpreter) tools.push({ type: 'code_interpreter' })
+      if (enabledTools.fileSearch) tools.push({ type: 'file_search' })
 
-        return {
-          type: 'mcp',
-          server_label: serverLabel,
-          server_url: `${process.env.NEXT_PUBLIC_SEARCH_ENDPOINT}/knowledgebases/${baseName}/mcp?api-version=${process.env.NEXT_PUBLIC_AZURE_SEARCH_API_VERSION || '2025-11-01-preview'}`,
-          allowed_tools: ['knowledge_base_retrieve']
-        }
-      })
+      // Build tool_resources for Azure AI Search
+      const toolResources: any = {}
+      if (selectedKnowledgeBases.size > 0) {
+        const indexes = Array.from(selectedKnowledgeBases).flatMap(kbName => {
+          const kb = knowledgeBases.find(b => b.name === kbName)
+          if (kb?.knowledgeSources && kb.knowledgeSources.length > 0) {
+            return kb.knowledgeSources.map(src => ({
+              index_connection_id: 'aikb-search',
+              index_name: `${src.name}-index`
+            }))
+          }
+          return [{ index_connection_id: 'aikb-search', index_name: `${kbName}-index` }]
+        })
+        toolResources.azure_ai_search = { indexes }
+      }
 
       const response = await fetch(`/api/foundry/assistants/${assistantId}`, {
         method: 'PATCH',
@@ -440,7 +464,8 @@ function AgentBuilderPageContent() {
         body: JSON.stringify({
           name: agentName,
           instructions: agentInstructions,
-          tools: mcpTools
+          tools,
+          tool_resources: Object.keys(toolResources).length > 0 ? toolResources : undefined
         })
       })
 
@@ -469,10 +494,10 @@ function AgentBuilderPageContent() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="gpt-4.1">GPT-4.1 (MCP Compatible)</SelectItem>
-                  <SelectItem value="gpt-4o">GPT-4o (Latest)</SelectItem>
+                  <SelectItem value="gpt-4.1">GPT-4.1 (Recommended)</SelectItem>
+                  <SelectItem value="gpt-4.1-mini">GPT-4.1 Mini</SelectItem>
                   <SelectItem value="gpt-4o-mini">GPT-4o Mini</SelectItem>
-                  <SelectItem value="gpt-3.5-turbo">GPT-3.5 Turbo</SelectItem>
+                  <SelectItem value="gpt-5">GPT-5 (Code Interpreter &amp; File Search only)</SelectItem>
                 </SelectContent>
               </Select>
             </div>
