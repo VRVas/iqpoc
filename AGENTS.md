@@ -153,7 +153,7 @@
 - **@azure/identity:** `^4.12.0` (Azure authentication)
 - **Azure AI Search API:** `2025-11-01-preview` (Knowledge Bases)
 - **Azure AI Foundry API:** `2025-05-01` (Assistants)
-- **Azure OpenAI:** GPT-4o, GPT-4.1, text-embedding-3-small/large
+- **Azure OpenAI:** GPT-5.2, GPT-5, GPT-4o-mini, text-embedding-3-small/large (via AI Services account)
 
 ### **State Management**
 - **React Context:** For theme (next-themes)

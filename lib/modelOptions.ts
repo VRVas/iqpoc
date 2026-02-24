@@ -14,5 +14,4 @@ export const MODEL_DEPLOYMENTS: ModelDeploymentOption[] = [
   { value: 'gpt-5-nano', label: 'GPT-5 Nano' },
   { value: 'gpt-5-mini', label: 'GPT-5 Mini' },
   { value: 'gpt-5', label: 'GPT-5' },
-  { value: 'gpt-5.2', label: 'GPT-5.2' },
 ];

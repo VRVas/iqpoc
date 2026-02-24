@@ -35,7 +35,7 @@ const SOURCE_TYPE_INFO = {
       containerName: 'kr-demos',
       folderPath: 'healthcare/',
       embeddingModel: 'text-embedding-3-large',
-      completionModel: 'gpt-5.2'
+      completionModel: 'gpt-5'
     }
   },
   searchIndex: {

@@ -67,7 +67,7 @@ export function CreateAgentForm({
     defaultValues: {
       name: '',
       description: '',
-      model: 'gpt-5.2', // Using supported model name
+      model: 'gpt-5', // Using supported model name
       sources: [],
       outputModality: 'extractiveData' as const,
       answerInstructions: '',
@@ -114,7 +114,7 @@ export function CreateAgentForm({
         models: [{
           kind: 'azureOpenAI',
           azureOpenAIParameters: {
-            resourceUri: process.env.NEXT_PUBLIC_FOUNDRY_ENDPOINT || '',
+            resourceUri: process.env.NEXT_PUBLIC_AZURE_OPENAI_ENDPOINT || '',
             deploymentId: data.model,
             modelName: data.model
             // API key will be injected server-side

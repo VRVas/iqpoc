@@ -56,7 +56,7 @@ export function CreateKnowledgeBaseForm({
     defaultValues: {
       name: '',
       description: '',
-  modelDeployment: 'gpt-5.2', // default selection
+  modelDeployment: 'gpt-5', // default selection
       sources: [],
       outputModality: 'extractiveData',
       answerInstructions: '',
@@ -108,7 +108,7 @@ export function CreateKnowledgeBaseForm({
           {
             kind: 'azureOpenAI',
             azureOpenAIParameters: {
-              resourceUri: process.env.NEXT_PUBLIC_FOUNDRY_ENDPOINT || '',
+              resourceUri: process.env.NEXT_PUBLIC_AZURE_OPENAI_ENDPOINT || '',
               deploymentId: data.modelDeployment,
               modelName: data.modelDeployment,
             },

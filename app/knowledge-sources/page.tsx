@@ -73,7 +73,7 @@ export default function KnowledgeSourcesPage() {
         description="Unified indexes and repositories optimized for high-quality agent grounding."
         primaryAction={isEditMode ? {
           label: "Connect source",
-          onClick: () => console.log('Connect source clicked'),
+          onClick: () => window.location.href = '/knowledge-sources/quick-create',
           icon: Add20Regular
         } : undefined}
       />
@@ -99,7 +99,7 @@ export default function KnowledgeSourcesPage() {
             description="Connect your first data source to enable knowledge retrieval and chat experiences."
             action={{
               label: "Connect source",
-              onClick: () => console.log('Connect source clicked')
+              onClick: () => window.location.href = '/knowledge-sources/quick-create'
             }}
           />
         ) : (

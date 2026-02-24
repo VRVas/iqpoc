@@ -12,14 +12,14 @@ interface KnowledgeSourceStatusIndicatorProps {
 }
 
 const statusVariantMap: Record<SynchronizationStatus, 'success' | 'info' | 'danger' | 'neutral'> = {
-  active: 'info',
+  active: 'success',
   idle: 'success',
   error: 'danger',
   notStarted: 'neutral'
 }
 
 const statusLabelMap: Record<SynchronizationStatus, string> = {
-  active: 'Syncing',
+  active: 'Ready',
   idle: 'Ready',
   error: 'Error',
   notStarted: 'Not Started'
@@ -73,11 +73,12 @@ export function KnowledgeSourceStatusIndicator({
   }
 
   const variant = statusVariantMap[status.synchronizationStatus] || 'neutral'
-  const label = statusLabelMap[status.synchronizationStatus] || status.synchronizationStatus
+  const isSyncing = status.synchronizationStatus === 'active' && status.currentSynchronizationState != null
+  const label = isSyncing ? 'Syncing' : (statusLabelMap[status.synchronizationStatus] || status.synchronizationStatus)
 
   return (
-    <StatusPill variant={variant}>
-      {status.synchronizationStatus === 'active' && (
+    <StatusPill variant={isSyncing ? 'info' : variant}>
+      {isSyncing && (
         <Loader2 className="mr-1 h-3 w-3 animate-spin" />
       )}
       {label}

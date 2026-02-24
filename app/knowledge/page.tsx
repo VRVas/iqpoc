@@ -65,6 +65,7 @@ function KnowledgePageContent() {
   const [deleteDialog, setDeleteDialog] = useState<{ open: boolean; kb: KnowledgeBase | null }>({ open: false, kb: null })
   const [showCreate, setShowCreate] = useState(false)
   const [sourceStatusMap, setSourceStatusMap] = useState<Record<string, { status: string; lastSync?: string }>>({})
+  const [allKnowledgeSources, setAllKnowledgeSources] = useState<{ name: string; kind: string }[]>([])
   const [deleteConfirmName, setDeleteConfirmName] = useState('')
   const [deleteLoading, setDeleteLoading] = useState(false)
 
@@ -115,9 +116,11 @@ function KnowledgePageContent() {
 
       // Create a map of knowledge source names to their kinds
       const sourceKindMap = new Map<string, string>()
-      for (const source of (ksData.value || [])) {
+      const allSources = (ksData.value || []).map((s: any) => ({ name: s.name, kind: s.kind || 'unknown' }))
+      for (const source of allSources) {
         sourceKindMap.set(source.name, source.kind)
       }
+      setAllKnowledgeSources(allSources)
 
       // Transform knowledge bases to display format
       const bases = (kbData.value || []).map((kb: any) => ({
@@ -285,7 +288,7 @@ function KnowledgePageContent() {
       {isEditMode && showCreate && (
         <div className="mb-6">
           <CreateKnowledgeBaseForm
-            knowledgeSources={Array.from(new Set(knowledgeBases.flatMap(kb => kb.knowledgeSources))).map(s => ({ name: (s as any).name, kind: (s as any).kind }))}
+            knowledgeSources={allKnowledgeSources}
             onSubmit={async () => { setShowCreate(false); await fetchData() }}
             onCancel={() => setShowCreate(false)}
           />

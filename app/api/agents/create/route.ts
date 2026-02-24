@@ -8,14 +8,18 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
 
-    // Add the API key to the model configuration server-side
-    // Azure AI Search requires the API key for Foundry model access
+    // Inject Azure AI Services credentials server-side
+    // Azure AI Search requires the API key and resource URI for model access
+    const openAIEndpoint = process.env.NEXT_PUBLIC_AZURE_OPENAI_ENDPOINT
+    const openAIKey = process.env.AZURE_OPENAI_API_KEY || process.env.FOUNDRY_API_KEY
+
     if (body.models && body.models.length > 0) {
       body.models.forEach((model: any) => {
         if (model.kind === 'azureOpenAI' && model.azureOpenAIParameters) {
-          model.azureOpenAIParameters.apiKey = process.env.FOUNDRY_API_KEY;
+          if (openAIEndpoint) model.azureOpenAIParameters.resourceUri = openAIEndpoint
+          if (openAIKey) model.azureOpenAIParameters.apiKey = openAIKey
           // Remove authIdentity when using API key
-          delete model.azureOpenAIParameters.authIdentity;
+          delete model.azureOpenAIParameters.authIdentity
         }
       });
     }

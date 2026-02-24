@@ -81,7 +81,7 @@ export function EditAgentForm({
     defaultValues: {
       name: agent.name,
       description: agent.description || '',
-      model: agent.models?.[0]?.azureOpenAIParameters?.modelName || 'gpt-5.2',
+      model: agent.models?.[0]?.azureOpenAIParameters?.modelName || 'gpt-5',
       outputModality: (agent as any).outputMode || 'extractiveData',
       answerInstructions: agent.answerInstructions || '',
       retrievalInstructions: agent.retrievalInstructions || '',
@@ -139,9 +139,9 @@ export function EditAgentForm({
         models: [{
           kind: 'azureOpenAI',
           azureOpenAIParameters: {
-            resourceUri: process.env.NEXT_PUBLIC_FOUNDRY_ENDPOINT || '',
-            deploymentId: data.model || 'gpt-5.2',
-            modelName: data.model || 'gpt-5.2'
+            resourceUri: process.env.NEXT_PUBLIC_AZURE_OPENAI_ENDPOINT || '',
+            deploymentId: data.model || 'gpt-5',
+            modelName: data.model || 'gpt-5'
           }
         }],
         knowledgeSources: selectedSources.map(name => ({
