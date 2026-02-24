@@ -67,7 +67,7 @@ export function CreateAgentForm({
     defaultValues: {
       name: '',
       description: '',
-      model: 'gpt-4o-mini', // Using supported model name
+      model: 'gpt-5.2', // Using supported model name
       sources: [],
       outputModality: 'extractiveData' as const,
       answerInstructions: '',

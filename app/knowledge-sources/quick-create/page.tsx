@@ -34,7 +34,7 @@ const SOURCE_TYPE_INFO = {
       containerName: 'kr-demos',
       folderPath: 'healthcare/',
       embeddingModel: 'text-embedding-3-large',
-      completionModel: 'gpt-4o-mini'
+      completionModel: 'gpt-5.2'
     }
   },
   searchIndex: {
@@ -91,12 +91,19 @@ function QuickCreateKnowledgeSourcePageContent() {
   }
 
   const validateConfig = () => {
-    if (!config.name || !config.connectionString) {
+    if (!config.name) {
+      return false
+    }
+
+    // Connection string is optional for azureBlob (server injects it)
+    if (config.sourceType !== 'azureBlob' && !config.connectionString) {
       return false
     }
 
     const requiredFields = SOURCE_TYPE_INFO[config.sourceType].requiredFields
     for (const field of requiredFields) {
+      // Skip connectionString check for azureBlob since it's injected server-side
+      if (field === 'connectionString' && config.sourceType === 'azureBlob') continue
       if (!config[field as keyof QuickCreateConfig]) {
         return false
       }
@@ -143,35 +150,32 @@ function QuickCreateKnowledgeSourcePageContent() {
   }
 
   const buildSourceSpecificPayload = () => {
-    const aoaiEndpoint = process.env.NEXT_PUBLIC_FOUNDRY_ENDPOINT || ''
-    const aoaiKey = process.env.FOUNDRY_API_KEY || ''
+    // Models must be nested inside ingestionParameters per the API schema
+    const ingestionParameters = {
+      embeddingModel: {
+        kind: 'azureOpenAI',
+        azureOpenAIParameters: {
+          deploymentId: 'text-embedding-3-large',
+          modelName: 'text-embedding-3-large'
+        }
+      },
+      chatCompletionModel: {
+        kind: 'azureOpenAI',
+        azureOpenAIParameters: {
+          deploymentId: 'gpt-5',
+          modelName: 'gpt-5'
+        }
+      }
+    }
 
     switch (config.sourceType) {
       case 'azureBlob':
         return {
           azureBlobParameters: {
-            connectionString: config.connectionString,
+            connectionString: config.connectionString || '__SERVER_INJECT__',
             containerName: config.containerName,
-            folderPath: config.folderPath,
-            embeddingModel: {
-              name: 'text-embedding-3-large',
-              kind: 'azureOpenAI',
-              azureOpenAIParameters: {
-                resourceUri: aoaiEndpoint,
-                apiKey: aoaiKey,
-                deploymentId: 'text-embedding-3-large',
-                modelName: 'text-embedding-3-large'
-              }
-            },
-            chatCompletionModel: {
-              kind: 'azureOpenAI',
-              azureOpenAIParameters: {
-                resourceUri: aoaiEndpoint,
-                apiKey: aoaiKey,
-                deploymentId: 'gpt-4o-mini',
-                modelName: 'gpt-4o-mini'
-              }
-            }
+            ...(config.folderPath ? { folderPath: config.folderPath } : {}),
+            ingestionParameters
           }
         }
       case 'searchIndex':
@@ -184,17 +188,7 @@ function QuickCreateKnowledgeSourcePageContent() {
       case 'web':
         return {
           webParameters: {
-            urls: config.urls,
-            embeddingModel: {
-              name: 'text-embedding-3-large',
-              kind: 'azureOpenAI',
-              azureOpenAIParameters: {
-                resourceUri: aoaiEndpoint,
-                apiKey: aoaiKey,
-                deploymentId: 'text-embedding-3-large',
-                modelName: 'text-embedding-3-large'
-              }
-            }
+            urls: config.urls
           }
         }
       default:
@@ -313,13 +307,13 @@ function QuickCreateKnowledgeSourcePageContent() {
                   value={config.connectionString}
                   onChange={(e) => setConfig({ ...config, connectionString: e.target.value })}
                   placeholder={selectedType === 'azureBlob'
-                    ? "ResourceId=/subscriptions/.../storageAccounts/..."
+                    ? "Leave blank to use server-configured storage, or paste a connection string"
                     : "https://your-search.search.windows.net"}
                   className="mt-1 font-mono text-sm"
                 />
                 <p className="text-xs text-fg-muted mt-1">
                   {selectedType === 'azureBlob'
-                    ? "Use ResourceId format or standard connection string"
+                    ? "Leave blank to auto-inject the server-side storage connection string (key-based auth)"
                     : "Your Azure AI Search endpoint URL"}
                 </p>
               </div>

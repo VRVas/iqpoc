@@ -56,7 +56,7 @@ export function CreateKnowledgeBaseForm({
     defaultValues: {
       name: '',
       description: '',
-  modelDeployment: 'gpt-4o-mini', // default selection
+  modelDeployment: 'gpt-5.2', // default selection
       sources: [],
       outputModality: 'extractiveData',
       answerInstructions: '',

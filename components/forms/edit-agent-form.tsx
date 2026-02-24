@@ -81,7 +81,7 @@ export function EditAgentForm({
     defaultValues: {
       name: agent.name,
       description: agent.description || '',
-      model: agent.models?.[0]?.azureOpenAIParameters?.modelName || 'gpt-4o-mini',
+      model: agent.models?.[0]?.azureOpenAIParameters?.modelName || 'gpt-5.2',
       outputModality: (agent as any).outputMode || 'extractiveData',
       answerInstructions: agent.answerInstructions || '',
       retrievalInstructions: agent.retrievalInstructions || '',
@@ -140,8 +140,8 @@ export function EditAgentForm({
           kind: 'azureOpenAI',
           azureOpenAIParameters: {
             resourceUri: process.env.NEXT_PUBLIC_FOUNDRY_ENDPOINT || '',
-            deploymentId: data.model || 'gpt-4o-mini',
-            modelName: data.model || 'gpt-4o-mini'
+            deploymentId: data.model || 'gpt-5.2',
+            modelName: data.model || 'gpt-5.2'
           }
         }],
         knowledgeSources: selectedSources.map(name => ({

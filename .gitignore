@@ -37,3 +37,6 @@ Thumbs.db
 
 # HTTP test files
 *.http.mcp.json
+
+# Uploaded data files
+data_to_inject/

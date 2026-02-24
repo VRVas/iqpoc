@@ -94,7 +94,7 @@ export function EditKnowledgeBaseForm({
       name: knowledgeBase.name,
       description: knowledgeBase.description || '',
       modelDeployment:
-        knowledgeBase.models?.[0]?.azureOpenAIParameters?.modelName || 'gpt-4o-mini',
+        knowledgeBase.models?.[0]?.azureOpenAIParameters?.modelName || 'gpt-5.2',
       sources: selectedSources,
       outputModality: outputModality as 'extractiveData' | 'answerSynthesis',
       answerInstructions,
