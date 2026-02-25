@@ -31,8 +31,18 @@ export function agentsUrl(path: string): string {
 
 /**
  * Return common headers (Authorization + Content-Type) for an upstream call.
+ * Prefers API key auth (AZURE_OPENAI_API_KEY) for simplicity in deployed environments.
+ * Falls back to bearer token auth via token-manager if no API key is available.
  */
 export async function foundryHeaders(): Promise<Record<string, string>> {
+  const apiKey = process.env.AZURE_OPENAI_API_KEY
+  if (apiKey) {
+    return {
+      'api-key': apiKey,
+      'Content-Type': 'application/json',
+    }
+  }
+  // Fallback to bearer token (requires service principal or managed identity)
   const token = await getFoundryBearerToken()
   return {
     Authorization: `Bearer ${token}`,
