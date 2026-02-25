@@ -501,15 +501,6 @@ function AgentBuilderPageContent() {
                 </SelectContent>
               </Select>
             </div>
-
-            <div className="p-4 bg-bg-secondary rounded-lg max-w-2xl">
-              <h3 className="text-sm font-medium mb-2">Model Capabilities</h3>
-              <ul className="text-sm text-fg-muted space-y-1">
-                <li>• 128K token context window</li>
-                <li>• Optimized for conversation and reasoning</li>
-                <li>• Supports function calling and JSON mode</li>
-              </ul>
-            </div>
           </div>
         )
 
@@ -715,7 +706,7 @@ function AgentBuilderPageContent() {
   // Show chat interface if agent is created
   if (assistantId) {
     return (
-      <div className="flex h-screen bg-bg-primary">
+      <div className="flex h-[calc(100vh-3.5rem)] bg-bg-primary">
         {/* Left Panel - Agent Info & Threads */}
         <div className="w-80 bg-bg-secondary border-r border-stroke-divider flex flex-col">
           <div className="p-4 border-b border-stroke-divider">
@@ -1041,7 +1032,7 @@ function AgentBuilderPageContent() {
 
 
   return (
-    <div className="flex h-screen bg-bg-primary">
+    <div className="flex h-[calc(100vh-3.5rem)] bg-bg-primary">
       {/* Left Navigation */}
       <div className="w-64 bg-bg-secondary border-r border-stroke-divider flex flex-col">
         <div className="p-4 border-b border-stroke-divider">
@@ -1160,7 +1151,7 @@ function AgentBuilderPageContent() {
 
 export default function AgentBuilderPage() {
   return (
-    <Suspense fallback={<div className="flex items-center justify-center min-h-screen"><div>Loading...</div></div>}>
+    <Suspense fallback={<div className="flex items-center justify-center h-full"><div>Loading...</div></div>}>
       <AgentBuilderPageContent />
     </Suspense>
   )

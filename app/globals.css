@@ -2,94 +2,160 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ─── Jotia font family — restricted to specific characters ─── */
+/* Unicode ranges: A-Z, a-z, 0-3, 5-9 (no 4), colon, semicolon */
+@font-face {
+  font-family: 'Jotia';
+  src: url('/jotia-fonts/jotia-thin.otf') format('opentype');
+  font-weight: 100;
+  font-style: normal;
+  font-display: swap;
+  unicode-range: U+0041-005A, U+0061-007A, U+0030-0033, U+0035-0039, U+003A-003B;
+}
+@font-face {
+  font-family: 'Jotia';
+  src: url('/jotia-fonts/jotia-light.otf') format('opentype');
+  font-weight: 300;
+  font-style: normal;
+  font-display: swap;
+  unicode-range: U+0041-005A, U+0061-007A, U+0030-0033, U+0035-0039, U+003A-003B;
+}
+@font-face {
+  font-family: 'Jotia';
+  src: url('/jotia-fonts/jotia-regular.otf') format('opentype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+  unicode-range: U+0041-005A, U+0061-007A, U+0030-0033, U+0035-0039, U+003A-003B;
+}
+@font-face {
+  font-family: 'Jotia';
+  src: url('/jotia-fonts/jotia-medium.otf') format('opentype');
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+  unicode-range: U+0041-005A, U+0061-007A, U+0030-0033, U+0035-0039, U+003A-003B;
+}
+@font-face {
+  font-family: 'Jotia';
+  src: url('/jotia-fonts/jotia-bold.otf') format('opentype');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+  unicode-range: U+0041-005A, U+0061-007A, U+0030-0033, U+0035-0039, U+003A-003B;
+}
+@font-face {
+  font-family: 'Jotia';
+  src: url('/jotia-fonts/jotia-heavy.otf') format('opentype');
+  font-weight: 900;
+  font-style: normal;
+  font-display: swap;
+  unicode-range: U+0041-005A, U+0061-007A, U+0030-0033, U+0035-0039, U+003A-003B;
+}
+
 @layer base {
   :root {
     color-scheme: light;
 
-    /* Light Neosonic surfaces */
-    --color-bg-canvas: 214 56% 97%;
-    --color-bg-subtle: 216 52% 95%;
+    /* ─── Qatar Airways Light Theme ─── */
+    /* Surfaces — clean neutrals with subtle warm undertone */
+    --color-bg-canvas: 300 3% 97%;
+    --color-bg-subtle: 300 3% 95%;
     --color-bg-card: 0 0% 100%;
-    --color-bg-elevated: 215 46% 92%;
-    --color-bg-hover: 214 60% 90%;
-    --color-bg-pressed: 214 66% 82%;
+    --color-bg-elevated: 300 3% 93%;
+    --color-bg-hover: 327 6% 93%;
+    --color-bg-pressed: 327 10% 88%;
 
-    --color-fg-default: 221 57% 11%;
-    --color-fg-muted: 222 20% 38%;
-    --color-fg-subtle: 222 14% 52%;
-    --color-fg-on-accent: 210 40% 98%;
+    /* Text — QR grey palette */
+    --color-fg-default: 327 15% 12%;
+    --color-fg-muted: 202 9% 41%;
+    --color-fg-subtle: 202 6% 53%;
+    --color-fg-on-accent: 0 0% 100%;
 
-    --color-accent-default: 201 92% 55%;
-    --color-accent-hover: 201 92% 50%;
-    --color-accent-pressed: 201 92% 43%;
-    --color-accent-subtle: 201 76% 92%;
-    --color-accent-muted: 201 68% 78%;
-    --color-accent-glow: 210 50% 60%;
-    --color-accent-gradient-from: 210 40% 50%;
-    --color-accent-gradient-to: 210 50% 45%;
+    /* Accent — QR Burgundy #662046 */
+    --color-accent-default: 327 52% 26%;
+    --color-accent-hover: 327 56% 22%;
+    --color-accent-pressed: 327 60% 18%;
+    --color-accent-subtle: 327 20% 95%;
+    --color-accent-muted: 327 20% 72%;
+    --color-accent-glow: 327 45% 40%;
+    --color-accent-gradient-from: 327 48% 28%;
+    --color-accent-gradient-to: 327 52% 22%;
 
-    --color-stroke-divider: 216 33% 86%;
-    --color-stroke-strong: 216 24% 70%;
-    --color-stroke-focus: 200 94% 63%;
+    /* Strokes */
+    --color-stroke-divider: 300 3% 86%;
+    --color-stroke-strong: 202 6% 70%;
+    --color-stroke-focus: 327 52% 32%;
 
-    --color-status-success: 158 64% 45%;
-    --color-status-warning: 36 92% 55%;
-    --color-status-danger: 345 85% 55%;
-    --color-status-info: 201 92% 55%;
+    /* Status — functional */
+    --color-status-success: 158 64% 42%;
+    --color-status-warning: 36 92% 50%;
+    --color-status-danger: 345 82% 50%;
+    --color-status-info: 202 65% 48%;
 
-    --color-overlay-soft: 214 55% 90%;
-    --color-overlay-strong: 210 45% 50%;
+    /* Overlays */
+    --color-overlay-soft: 300 3% 90%;
+    --color-overlay-strong: 327 30% 40%;
 
-    --color-glass-surface: hsla(0, 0%, 100%, 0.78);
-    --color-glass-hover: hsla(210, 56%, 94%, 0.92);
-    --color-glass-border: hsla(213, 68%, 78%, 0.45);
+    /* Glass */
+    --color-glass-surface: hsla(0, 0%, 100%, 0.80);
+    --color-glass-hover: hsla(327, 6%, 95%, 0.92);
+    --color-glass-border: hsla(327, 30%, 50%, 0.25);
 
-    --shadow-color: 222 32% 16%;
-    --shadow-glow: 210 50% 60%;
+    --shadow-color: 327 20% 14%;
+    --shadow-glow: 327 45% 40%;
   }
 
   .dark {
     color-scheme: dark;
 
-    --color-bg-canvas: 222 47% 11%;
-    --color-bg-subtle: 223 44% 14%;
-    --color-bg-card: 224 38% 18%;
-    --color-bg-elevated: 223 38% 21%;
-    --color-bg-hover: 223 42% 25%;
-    --color-bg-pressed: 224 44% 30%;
+    /* ─── Qatar Airways Dark Theme ─── */
+    /* Surfaces — deep neutrals with cool undertone */
+    --color-bg-canvas: 250 8% 9%;
+    --color-bg-subtle: 250 7% 12%;
+    --color-bg-card: 250 6% 15%;
+    --color-bg-elevated: 250 6% 18%;
+    --color-bg-hover: 250 7% 22%;
+    --color-bg-pressed: 250 7% 27%;
 
-    --color-fg-default: 214 38% 92%;
-    --color-fg-muted: 220 18% 72%;
-    --color-fg-subtle: 222 16% 60%;
+    /* Text */
+    --color-fg-default: 0 0% 93%;
+    --color-fg-muted: 210 5% 68%;
+    --color-fg-subtle: 210 4% 52%;
     --color-fg-on-accent: 0 0% 100%;
 
-    --color-accent-default: 201 92% 65%;
-    --color-accent-hover: 201 92% 60%;
-    --color-accent-pressed: 201 92% 52%;
-    --color-accent-subtle: 223 42% 22%;
-    --color-accent-muted: 210 35% 42%;
-    --color-accent-glow: 210 55% 65%;
-    --color-accent-gradient-from: 210 50% 60%;
-    --color-accent-gradient-to: 210 45% 55%;
+    /* Accent — lightened burgundy for dark backgrounds */
+    --color-accent-default: 327 50% 60%;
+    --color-accent-hover: 327 52% 55%;
+    --color-accent-pressed: 327 54% 48%;
+    --color-accent-subtle: 327 20% 16%;
+    --color-accent-muted: 327 25% 38%;
+    --color-accent-glow: 327 50% 55%;
+    --color-accent-gradient-from: 327 48% 52%;
+    --color-accent-gradient-to: 327 52% 45%;
 
-    --color-stroke-divider: 223 32% 26%;
-    --color-stroke-strong: 223 32% 34%;
-    --color-stroke-focus: 201 92% 65%;
+    /* Strokes */
+    --color-stroke-divider: 250 6% 22%;
+    --color-stroke-strong: 250 5% 30%;
+    --color-stroke-focus: 327 50% 60%;
 
+    /* Status — functional */
     --color-status-success: 158 64% 52%;
-    --color-status-warning: 36 92% 62%;
-    --color-status-danger: 345 86% 62%;
-    --color-status-info: 200 92% 64%;
+    --color-status-warning: 36 92% 60%;
+    --color-status-danger: 345 86% 60%;
+    --color-status-info: 202 70% 58%;
 
-    --color-overlay-soft: 223 38% 16%;
-    --color-overlay-strong: 210 45% 55%;
+    /* Overlays */
+    --color-overlay-soft: 250 7% 14%;
+    --color-overlay-strong: 327 40% 50%;
 
-    --color-glass-surface: hsla(223, 42%, 18%, 0.78);
-    --color-glass-hover: hsla(223, 42%, 26%, 0.82);
-    --color-glass-border: hsla(201, 92%, 65%, 0.35);
+    /* Glass */
+    --color-glass-surface: hsla(250, 8%, 14%, 0.80);
+    --color-glass-hover: hsla(250, 7%, 22%, 0.85);
+    --color-glass-border: hsla(327, 50%, 60%, 0.30);
 
-    --shadow-color: 222 55% 7%;
-    --shadow-glow: 210 55% 65%;
+    --shadow-color: 250 10% 5%;
+    --shadow-glow: 327 50% 55%;
   }
 
   * {
@@ -113,14 +179,14 @@
     min-height: 100vh;
     background-color: hsl(var(--color-bg-canvas));
     background-image:
-      radial-gradient(circle at 18% 20%, hsl(var(--color-accent-default) / 0.08), transparent 50%);
+      radial-gradient(circle at 18% 20%, hsl(var(--color-accent-default) / 0.06), transparent 50%);
     background-attachment: fixed;
     font-feature-settings: 'rlig' 1, 'calt' 1;
   }
 
   .dark body {
     background-image:
-      radial-gradient(circle at 15% 15%, hsl(var(--color-accent-default) / 0.12), transparent 50%);
+      radial-gradient(circle at 15% 15%, hsl(var(--color-accent-default) / 0.10), transparent 50%);
   }
 
   ::selection {

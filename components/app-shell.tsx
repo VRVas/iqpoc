@@ -3,21 +3,18 @@
 import * as React from 'react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
+import { Switch } from '@/components/ui/switch'
 import { ThemeToggle } from '@/components/theme-toggle'
+import { useViewMode } from '@/lib/view-mode'
 import {
-  Search20Regular,
   Database20Regular,
   Bot20Regular,
   Play20Regular,
   Navigation20Regular,
   Dismiss20Regular,
-  ArrowUpRight16Regular,
-  Apps20Regular,
-  People20Regular,
-  Home20Regular
 } from '@fluentui/react-icons'
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Tooltip } from '@/components/ui/tooltip'
 import Image from 'next/image'
@@ -42,6 +39,7 @@ export function AppShell({ children }: AppShellProps) {
   const [sidebarOpen, setSidebarOpen] = React.useState(false)
   const [collapsed, setCollapsed] = React.useState(false)
   const pathname = usePathname()
+  const { isAgent } = useViewMode()
 
   // Load persisted collapse state
   React.useEffect(() => {
@@ -71,8 +69,8 @@ export function AppShell({ children }: AppShellProps) {
     return () => window.removeEventListener('keydown', handler)
   }, [])
 
-  // Always show sidebar except on landing page
-  const showSidebar = pathname !== '/'
+  // In agent mode: no sidebar at all. In admin mode: sidebar except landing page.
+  const showSidebar = !isAgent && pathname !== '/'
 
   return (
   <div className="relative h-screen overflow-y-hidden bg-bg-canvas text-fg-default">
@@ -138,6 +136,18 @@ interface HeaderProps {
 }
 
 function Header({ onMenuClick, showSidebar }: HeaderProps) {
+  const { viewMode, setViewMode, isAdmin } = useViewMode()
+  const router = useRouter()
+
+  const handleModeToggle = (checked: boolean) => {
+    const newMode = checked ? 'admin' : 'agent'
+    setViewMode(newMode)
+    // When switching to agent mode, redirect to /test?agent=test
+    if (newMode === 'agent') {
+      router.push('/test?agent=test')
+    }
+  }
+
   return (
   <header className="fixed top-0 left-0 right-0 z-30 border-b border-glass-border bg-glass-surface backdrop-blur-elevated shadow-sm">
       <div className="flex h-16 items-center justify-between px-6">
@@ -154,64 +164,30 @@ function Header({ onMenuClick, showSidebar }: HeaderProps) {
             </Button>
           )}
 
-          <Link href="/" aria-label="Home" className="flex min-w-0 items-center gap-2 rounded-xl px-2 py-1 focus:outline-none focus-visible:ring-2 focus-visible:ring-stroke-focus focus-visible:ring-offset-2 focus-visible:ring-offset-bg-canvas">
-            <Image src="/icons/foundryiq.svg" alt="Foundry IQ" width={26} height={26} priority className="shrink-0" />
-            <span className="truncate text-lg font-semibold leading-tight tracking-tight max-w-[9rem] sm:max-w-none">
-              <span className="hidden sm:inline">Foundry IQ Demo</span>
-              <span className="sm:hidden">Foundry IQ</span>
+          <Link href={isAdmin ? '/' : '/test?agent=test'} aria-label="Home" className="flex min-w-0 items-center gap-2.5 rounded-xl px-2 py-1 focus:outline-none focus-visible:ring-2 focus-visible:ring-stroke-focus focus-visible:ring-offset-2 focus-visible:ring-offset-bg-canvas">
+            {/* QR Oryx logo — dark version for light mode, light for dark */}
+            <Image src="/logo-dark.png" alt="Qatar Airways" width={32} height={32} priority className="shrink-0 dark:hidden object-contain" />
+            <Image src="/logo_light.png" alt="Qatar Airways" width={32} height={32} priority className="shrink-0 hidden dark:block object-contain" />
+            <span className="truncate text-base font-semibold leading-tight tracking-tight max-w-[14rem] sm:max-w-none">
+              <span className="hidden sm:inline">Qatar Airways Contact Center Assistant</span>
+              <span className="sm:hidden">QR Assistant</span>
             </span>
           </Link>
-
         </div>
 
         <div className="flex items-center gap-4">
-          <a 
-            href="https://learn.microsoft.com/rest/api/searchservice/knowledge-bases?view=rest-searchservice-2025-11-01-preview" 
-            target="_blank" 
-            rel="noopener noreferrer"
-            className="flex items-center gap-1 rounded-full px-3 py-1.5 text-sm font-medium text-fg-muted transition-colors duration-fast hover:text-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-stroke-focus focus-visible:ring-offset-2 focus-visible:ring-offset-bg-canvas"
-          >
-            <span>API docs</span>
-            <ArrowUpRight16Regular className="h-3.5 w-3.5" />
-          </a>
-          
-          <Tooltip content="View on GitHub">
-            <a 
-              href="https://github.com/VRVas/iqpoc" 
-              target="_blank" 
-              rel="noopener noreferrer"
-              className="flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-medium text-fg-muted transition-colors duration-fast hover:text-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-stroke-focus focus-visible:ring-offset-2 focus-visible:ring-offset-bg-canvas"
-            >
-              <span>Source</span>
-              <Image 
-                src="/icons/github-mark.svg" 
-                alt="GitHub" 
-                width={16} 
-                height={16} 
-                className="dark:hidden" 
-              />
-              <Image 
-                src="/icons/github-mark-white.svg" 
-                alt="GitHub" 
-                width={16} 
-                height={16} 
-                className="hidden dark:block" 
-              />
-            </a>
-          </Tooltip>
-          
+          {/* Agent / Admin toggle */}
+          <div className="flex items-center gap-2">
+            <span className={cn('text-xs font-medium transition-colors', !isAdmin ? 'text-accent' : 'text-fg-muted')}>Agent</span>
+            <Switch
+              checked={isAdmin}
+              onCheckedChange={handleModeToggle}
+              aria-label="Toggle between Agent and Admin view"
+            />
+            <span className={cn('text-xs font-medium transition-colors', isAdmin ? 'text-accent' : 'text-fg-muted')}>Admin</span>
+          </div>
+
           <ThemeToggle />
-          <Button variant="ghost" size="icon" aria-label="Account settings" className="rounded-full bg-glass-surface shadow-xs hover:shadow-md">
-            <div className="flex h-7 w-7 items-center justify-center rounded-full bg-accent-subtle overflow-hidden">
-              <Image 
-                src="/icons/avatar.svg" 
-                alt="User" 
-                width={28} 
-                height={28} 
-                className="object-cover"
-              />
-            </div>
-          </Button>
         </div>
       </div>
     </header>
@@ -283,8 +259,9 @@ function Sidebar({ navigation, currentPath, isOpen, onClose, collapsed, onToggle
             <div className="flex flex-col h-full">
               <div className="flex h-16 items-center justify-between border-b border-glass-border px-4">
                 <Link href="/" aria-label="Home" className="flex min-w-0 items-center gap-1.5 rounded-lg px-2 py-1 focus:outline-none focus-visible:ring-2 focus-visible:ring-stroke-focus focus-visible:ring-offset-2 focus-visible:ring-offset-bg-canvas">
-                  <Image src="/icons/search_icon.svg" alt="Azure AI Search" width={26} height={26} className="shrink-0" />
-                  <span className="truncate text-sm font-semibold leading-tight">Foundry IQ Demo</span>
+                  <Image src="/logo-dark.png" alt="Qatar Airways" width={24} height={24} className="shrink-0 dark:hidden object-contain" />
+                  <Image src="/logo_light.png" alt="Qatar Airways" width={24} height={24} className="shrink-0 hidden dark:block object-contain" />
+                  <span className="truncate text-sm font-semibold leading-tight">QR Assistant</span>
                 </Link>
                 <Button
                   variant="ghost"

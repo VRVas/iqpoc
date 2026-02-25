@@ -95,10 +95,13 @@ module.exports = {
         mono: tokens.font.family.mono,
       },
       fontWeight: {
+        thin: tokens.font.weight.thin,
+        light: tokens.font.weight.light,
         normal: tokens.font.weight.normal,
         medium: tokens.font.weight.medium,
         semibold: tokens.font.weight.semibold,
         bold: tokens.font.weight.bold,
+        black: tokens.font.weight.black,
       },
       transitionDuration: {
         fast: tokens.transition.duration.fast,
