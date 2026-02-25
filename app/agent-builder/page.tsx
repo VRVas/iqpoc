@@ -282,7 +282,7 @@ function AgentBuilderPageContent() {
 
     try {
       // Add message to thread
-      await fetch('/api/foundry/messages', {
+      const msgResponse = await fetch('/api/foundry/messages', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -293,6 +293,27 @@ function AgentBuilderPageContent() {
           content: userMessage
         })
       })
+
+      if (!msgResponse.ok) {
+        const msgErr = await msgResponse.json().catch(() => ({}))
+        // If there's an active run, wait for it to complete then retry
+        if (msgErr?.error?.includes?.('active run') || msgErr?.details?.error?.message?.includes?.('active run')) {
+          if (runId) {
+            await pollRunStatus(runId)
+          }
+          // Retry adding message after the run completes
+          const retryResp = await fetch('/api/foundry/messages', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ threadId, role: 'user', content: userMessage })
+          })
+          if (!retryResp.ok) {
+            throw new Error('Failed to add message after waiting for active run')
+          }
+        } else {
+          throw new Error(msgErr?.error || 'Failed to add message to thread')
+        }
+      }
 
       // Create run — azure_ai_search tools are configured on the assistant,
       // so no tool_resources needed per-run
@@ -308,7 +329,8 @@ function AgentBuilderPageContent() {
       })
 
       if (!runResponse.ok) {
-        throw new Error('Failed to create run')
+        const runErr = await runResponse.json().catch(() => ({}))
+        throw new Error(runErr?.error || 'Failed to create run')
       }
 
       const run = await runResponse.json()
