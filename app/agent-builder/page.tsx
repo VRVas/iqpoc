@@ -69,6 +69,9 @@ function AgentBuilderPageContent() {
     webSearch: false
   })
 
+  // Track whether the agent has azure_ai_search configured (for tool_choice forcing)
+  const [hasSearchTool, setHasSearchTool] = useState(false)
+
   // Foundry agent state
   const [assistantId, setAssistantId] = useState<string | null>(existingAssistantId || null)
   const [threadId, setThreadId] = useState<string | null>(null)
@@ -82,22 +85,26 @@ function AgentBuilderPageContent() {
   const [showCodeModal, setShowCodeModal] = useState(false)
 
   useEffect(() => {
-    loadKnowledgeBases()
+    const init = async () => {
+      // Load knowledge bases first
+      await loadKnowledgeBases()
 
-    // If we have an existing assistant ID (playground mode), load assistant details and create a thread
-    if (existingAssistantId && mode === 'playground') {
-      loadExistingAssistantDetails()
-      createThread().then(thread => {
-        setThreadId(thread.id)
-        setThreads([{
-          id: thread.id,
-          created_at: new Date().toISOString(),
-          messages: []
-        }])
-      }).catch(err => {
-        console.error('Failed to create thread for existing assistant:', err)
-      })
+      // THEN load existing assistant details (overrides selectedKnowledgeBases)
+      if (existingAssistantId && mode === 'playground') {
+        await loadExistingAssistantDetails()
+        createThread().then(thread => {
+          setThreadId(thread.id)
+          setThreads([{
+            id: thread.id,
+            created_at: new Date().toISOString(),
+            messages: []
+          }])
+        }).catch(err => {
+          console.error('Failed to create thread for existing assistant:', err)
+        })
+      }
     }
+    init()
   }, [existingAssistantId, mode])
 
   const loadExistingAssistantDetails = async () => {
@@ -117,6 +124,7 @@ function AgentBuilderPageContent() {
         // Extract knowledge bases from azure_ai_search tool_resources
         const searchIndexes = assistant.tool_resources?.azure_ai_search?.indexes
         if (searchIndexes && searchIndexes.length > 0) {
+          setHasSearchTool(true)
           const kbNames = searchIndexes.map((idx: any) => {
             // Strip '-index' suffix to get knowledge source / KB name
             const name = idx.index_name || ''
@@ -205,6 +213,7 @@ function AgentBuilderPageContent() {
         })
 
         toolResources.azure_ai_search = { indexes }
+        setHasSearchTool(true)
       }
 
       // Create the Foundry assistant
@@ -315,17 +324,21 @@ function AgentBuilderPageContent() {
         }
       }
 
-      // Create run — azure_ai_search tools are configured on the assistant,
-      // so no tool_resources needed per-run
+      // Create run — force azure_ai_search tool when knowledge bases are
+      // attached so the model grounds its answers instead of using training data
+      const runPayload: Record<string, unknown> = {
+        threadId,
+        assistantId,
+      }
+      if (hasSearchTool || selectedKnowledgeBases.size > 0) {
+        runPayload.tool_choice = { type: 'azure_ai_search' }
+      }
       const runResponse = await fetch('/api/foundry/runs', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({
-          threadId,
-          assistantId
-        })
+        body: JSON.stringify(runPayload)
       })
 
       if (!runResponse.ok) {
@@ -476,6 +489,7 @@ function AgentBuilderPageContent() {
           return [{ index_connection_id: 'aikb-search', index_name: `${kbName}-index` }]
         })
         toolResources.azure_ai_search = { indexes }
+        setHasSearchTool(true)
       }
 
       const response = await fetch(`/api/foundry/assistants/${assistantId}`, {

@@ -53,7 +53,7 @@ export function KnowledgeSourceCard({ source }: KnowledgeSourceCardProps) {
           </div>
           
           <Button variant="ghost" size="icon" asChild>
-            <Link href={`/knowledge-sources/${source.id}`}>
+            <Link href={`/knowledge-sources/${source.name}`}>
               <Open20Regular className="h-4 w-4" />
               <span className="sr-only">View source details</span>
             </Link>

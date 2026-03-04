@@ -190,7 +190,10 @@ function QuickCreateKnowledgeSourcePageContent() {
         return {
           webParameters: {
             domains: {
-              allowedDomains: config.domains || [],
+              allowedDomains: (config.domains || []).map(d => ({
+                address: d.replace(/^https?:\/\//i, ''),
+                includeSubpages: true
+              })),
               blockedDomains: []
             }
           }
