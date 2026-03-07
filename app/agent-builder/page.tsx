@@ -28,6 +28,9 @@ import { fetchKnowledgeBases, createFoundryAgent } from '@/lib/api'
 import { LoadingSkeleton } from '@/components/shared/loading-skeleton'
 import { AgentCodeModal } from '@/components/agent-code-modal'
 import { cn } from '@/lib/utils'
+import { InlineCitationsText, SourcesCountButton } from '@/components/inline-citations'
+import { SourcesPanel } from '@/components/sources-panel'
+import { KnowledgeBaseReference, KnowledgeBaseActivityRecord } from '@/types/knowledge-retrieval'
 
 interface KnowledgeBase {
   name: string
@@ -83,6 +86,23 @@ function AgentBuilderPageContent() {
   // Thread management
   const [threads, setThreads] = useState<any[]>([])
   const [showCodeModal, setShowCodeModal] = useState(false)
+
+  // Sources panel state (Perplexity-style side panel for citations)
+  const [sourcesPanel, setSourcesPanel] = useState<{
+    isOpen: boolean
+    messageId: string | null
+    references: KnowledgeBaseReference[]
+    activity: KnowledgeBaseActivityRecord[]
+    query?: string
+  }>({ isOpen: false, messageId: null, references: [], activity: [] })
+
+  const handleOpenSourcesPanel = (messageId: string, references: KnowledgeBaseReference[], activity: KnowledgeBaseActivityRecord[], query?: string) => {
+    setSourcesPanel({ isOpen: true, messageId, references, activity, query })
+  }
+
+  const handleCloseSourcesPanel = () => {
+    setSourcesPanel(prev => ({ ...prev, isOpen: false }))
+  }
 
   useEffect(() => {
     const init = async () => {
@@ -283,6 +303,7 @@ function AgentBuilderPageContent() {
 
     // Add user message to display
     const newUserMessage = {
+      id: `user-${Date.now()}`,
       role: 'user',
       content: userMessage,
       timestamp: new Date().toISOString()
@@ -389,12 +410,66 @@ function AgentBuilderPageContent() {
 
             if (assistantMessages.length > 0) {
               const latestAssistant = assistantMessages[0]
+              const textContent = latestAssistant.content[0]?.text
+              let rawText = textContent?.value || 'No response content'
+              const annotations = textContent?.annotations || []
+
+              // Transform Foundry annotations into KnowledgeBaseReference[]
+              // and replace annotation markers with [ref_id:N]
+              const references: KnowledgeBaseReference[] = []
+              if (annotations.length > 0) {
+                // Sort annotations by start_index descending so we can replace from end to start
+                const sorted = [...annotations].sort((a: any, b: any) => (b.start_index ?? 0) - (a.start_index ?? 0))
+                sorted.forEach((ann: any) => {
+                  const refIdx = references.length
+
+                  if (ann.type === 'url_citation' && ann.url_citation) {
+                    references.push({
+                      type: 'web',
+                      id: String(refIdx),
+                      activitySource: 0,
+                      url: ann.url_citation.url || '',
+                      title: ann.url_citation.title || ann.url_citation.url || '',
+                      sourceData: { title: ann.url_citation.title, content: '' }
+                    } as any)
+                  } else if (ann.type === 'file_citation' && ann.file_citation) {
+                    references.push({
+                      type: 'searchIndex',
+                      id: String(refIdx),
+                      activitySource: 0,
+                      docKey: ann.file_citation.file_id || '',
+                      sourceData: { title: ann.file_citation.quote || 'Document', content: ann.file_citation.quote || '' }
+                    } as any)
+                  } else {
+                    // Generic fallback for other annotation types
+                    references.push({
+                      type: 'searchIndex',
+                      id: String(refIdx),
+                      activitySource: 0,
+                      docKey: ann.text || '',
+                      sourceData: { title: ann.text || 'Source', content: '' }
+                    } as any)
+                  }
+
+                  // Replace the annotation marker text with [ref_id:N]
+                  if (typeof ann.start_index === 'number' && typeof ann.end_index === 'number') {
+                    rawText = rawText.slice(0, ann.start_index) + `[ref_id:${refIdx}]` + rawText.slice(ann.end_index)
+                  }
+                })
+                // Reverse references since we built them in descending order
+                references.reverse()
+              }
+
+              const msgId = `msg-${Date.now()}`
               setMessages(prev => [...prev, {
+                id: msgId,
                 role: 'assistant',
-                content: latestAssistant.content[0]?.text?.value || 'No response content',
+                content: rawText,
                 timestamp: new Date().toISOString(),
                 toolCalls: run.tool_calls || [],
-                runId: run.id
+                runId: run.id,
+                references,
+                activity: []
               }])
             }
           }
@@ -950,14 +1025,7 @@ function AgentBuilderPageContent() {
                 <h2 className="text-lg font-semibold">Test your agent</h2>
                 <p className="text-sm text-fg-muted">Send messages to test the MCP knowledge integration</p>
               </div>
-              <Button
-                variant="ghost"
-                onClick={() => setShowCodeModal(true)}
-                className="gap-2"
-              >
-                <CodeText20Regular className="h-4 w-4" />
-                View Code
-              </Button>
+              {/* View Code button hidden */}
             </div>
           </div>
 
@@ -970,42 +1038,71 @@ function AgentBuilderPageContent() {
                 <p className="text-xs text-fg-muted mt-1">Try asking about topics covered in your knowledge bases</p>
               </div>
             ) : (
-              messages.map((message, index) => (
-                <div
-                  key={index}
-                  className={cn(
-                    "flex gap-3 max-w-4xl",
-                    message.role === 'user' ? "ml-auto flex-row-reverse" : ""
-                  )}
-                >
-                  <div className={cn(
-                    "w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0",
-                    message.role === 'user'
-                      ? "bg-bg-accent text-fg-on-accent"
-                      : "bg-bg-secondary text-fg-secondary"
-                  )}>
-                    {message.role === 'user' ? 'U' : 'A'}
-                  </div>
-                  <div className={cn(
-                    "p-3 rounded-lg",
-                    message.role === 'user'
-                      ? "bg-bg-accent text-fg-on-accent ml-12"
-                      : "bg-bg-secondary mr-12"
-                  )}>
-                    <div className="text-sm whitespace-pre-wrap">{message.content}</div>
-                    {message.toolCalls && message.toolCalls.length > 0 && (
-                      <div className="mt-2 pt-2 border-t border-stroke-divider">
-                        <div className="text-xs text-fg-muted">
-                          🔧 Tools used: {message.toolCalls.map(tc => tc.type || 'MCP').join(', ')}
+              messages.map((message, index) => {
+                const msgId = message.id || `msg-${index}`
+                const refs = (message.references || []) as KnowledgeBaseReference[]
+                const acts = (message.activity || []) as KnowledgeBaseActivityRecord[]
+                const isUser = message.role === 'user'
+
+                return (
+                  <div
+                    key={msgId}
+                    className={cn(
+                      "flex items-start gap-4",
+                      isUser && "flex-row-reverse"
+                    )}
+                  >
+                    <div className={cn(
+                      "p-2 rounded-full flex-shrink-0",
+                      isUser ? "bg-bg-subtle" : "bg-accent-subtle"
+                    )}>
+                      {isUser ? (
+                        <span className="w-4 h-4 flex items-center justify-center text-xs font-semibold">U</span>
+                      ) : (
+                        <Bot20Regular className="h-4 w-4 text-accent" />
+                      )}
+                    </div>
+                    <div className={cn('flex-1 max-w-[80%] min-w-0', isUser && 'flex justify-end')}>
+                      <div className={cn(
+                        "rounded-lg p-4 overflow-hidden",
+                        isUser
+                          ? "bg-accent text-fg-on-accent ml-12"
+                          : "bg-bg-card border border-stroke-divider"
+                      )}>
+                        <div className="prose prose-sm max-w-none space-y-3 overflow-x-auto">
+                          <p className="whitespace-pre-wrap break-words">
+                            <InlineCitationsText
+                              text={message.content}
+                              references={refs}
+                              activity={acts}
+                              messageId={msgId}
+                              onActivate={() => !isUser && refs.length > 0 && handleOpenSourcesPanel(msgId, refs, acts, message.content?.slice(0, 100))}
+                            />
+                          </p>
                         </div>
+
+                        {/* Sources button */}
+                        {!isUser && refs.length > 0 && (
+                          <div className="mt-4 pt-4 border-t border-stroke-divider">
+                            <SourcesCountButton
+                              references={refs}
+                              onClick={() => handleOpenSourcesPanel(msgId, refs, acts, message.content?.slice(0, 100))}
+                            />
+                          </div>
+                        )}
+
+                        {message.toolCalls && message.toolCalls.length > 0 && (
+                          <div className="mt-2 pt-2 border-t border-stroke-divider">
+                            <div className="text-xs text-fg-muted">
+                              🔧 Tools used: {message.toolCalls.map((tc: any) => tc.type || 'MCP').join(', ')}
+                            </div>
+                          </div>
+                        )}
                       </div>
-                    )}
-                    {message.runId && (
-                      <div className="text-xs text-fg-muted mt-1">Run ID: {message.runId}</div>
-                    )}
+                    </div>
                   </div>
-                </div>
-              ))
+                )
+              })
             )}
             {isRunning && (
               <div className="flex gap-3">
@@ -1051,16 +1148,14 @@ function AgentBuilderPageContent() {
           </div>
         </div>
 
-        {/* Code Modal */}
-        <AgentCodeModal
-          isOpen={showCodeModal}
-          onClose={() => setShowCodeModal(false)}
-          agentName={agentName}
-          selectedKnowledgeBases={Array.from(selectedKnowledgeBases)}
-          agentInstructions={agentInstructions}
-          selectedModel={selectedModel}
-          assistantId={assistantId}
-          threadId={threadId}
+        {/* Sources Panel - Perplexity-style side panel */}
+        <SourcesPanel
+          isOpen={sourcesPanel.isOpen}
+          onClose={handleCloseSourcesPanel}
+          references={sourcesPanel.references}
+          activity={sourcesPanel.activity}
+          query={sourcesPanel.query}
+          messageId={sourcesPanel.messageId || ''}
         />
       </div>
     )
@@ -1130,15 +1225,7 @@ function AgentBuilderPageContent() {
                 <Button variant="secondary" className="flex-1">
                   Save as draft
                 </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="gap-1"
-                  onClick={() => setShowCodeModal(true)}
-                >
-                  <CodeText20Regular className="h-4 w-4" />
-                  Code
-                </Button>
+                {/* Code button hidden */}
               </div>
               <p className="text-xs text-fg-muted mt-2 text-center">
                 You can add knowledge bases after creating the agent
