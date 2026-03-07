@@ -88,8 +88,7 @@ export function IndustryKnowledgeSelector() {
           className="text-center space-y-4"
         >
           <div className="inline-flex mb-2">
-            <Image src="/logo-dark.png" alt="Qatar Airways" width={48} height={48} className="dark:hidden object-contain" />
-            <Image src="/logo_light.png" alt="Qatar Airways" width={48} height={48} className="hidden dark:block object-contain" />
+            <Image src="/logo-dark.png" alt="Qatar Airways" width={48} height={48} className="object-contain" />
           </div>
           <h1 className="text-4xl font-bold text-fg-default">
             Knowledge Bases

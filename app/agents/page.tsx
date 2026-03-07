@@ -39,7 +39,7 @@ type FoundryAssistant = {
   tools: { type: string }[]
   tool_resources?: {
     azure_ai_search?: {
-      indexes?: { index_connection_id: string; index_name: string }[]
+      indexes?: { index_connection_id: string | null; index_name: string | null; index_asset_id?: string | null }[]
     }
   }
   created_at: number
@@ -58,7 +58,8 @@ function getToolLabel(type: string) {
   return TOOL_DISPLAY[type]?.label ?? type
 }
 
-function getIndexDisplayName(indexName: string) {
+function getIndexDisplayName(indexName: string | null | undefined) {
+  if (!indexName) return 'unknown'
   return indexName.endsWith('-index') ? indexName.slice(0, -6) : indexName
 }
 
@@ -272,7 +273,7 @@ function AgentsPageContent() {
                             <span
                               key={i}
                               className="inline-flex items-center gap-1.5 px-2.5 py-1.5 bg-bg-subtle rounded-full border border-stroke-divider text-xs font-medium text-fg-default truncate max-w-[160px]"
-                              title={idx.index_name}
+                              title={idx.index_name || idx.index_asset_id || 'unknown'}
                             >
                               <Search20Regular className="h-3 w-3 flex-shrink-0 text-accent" />
                               {getIndexDisplayName(idx.index_name)}

@@ -48,14 +48,7 @@ export function LandingPage() {
             alt="Qatar Airways"
             width={72}
             height={72}
-            className="dark:hidden object-contain"
-          />
-          <Image
-            src="/logo_light.png"
-            alt="Qatar Airways"
-            width={72}
-            height={72}
-            className="hidden dark:block object-contain"
+            className="object-contain"
           />
         </div>
 
