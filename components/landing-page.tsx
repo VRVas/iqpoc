@@ -44,7 +44,7 @@ export function LandingPage() {
         {/* Logo */}
         <div className="mb-8 inline-flex">
           <Image
-            src="/logo-dark.png"
+            src="/logo_light.png"
             alt="Qatar Airways"
             width={72}
             height={72}
