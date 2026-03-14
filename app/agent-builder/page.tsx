@@ -24,7 +24,7 @@ import { Card } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select'
-import { fetchKnowledgeBases, createFoundryAgent } from '@/lib/api'
+import { fetchKnowledgeBases, fetchKnowledgeSources, createFoundryAgentV2, createConversation, sendAgentResponse } from '@/lib/api'
 import { LoadingSkeleton } from '@/components/shared/loading-skeleton'
 import { AgentCodeModal } from '@/components/agent-code-modal'
 import { cn } from '@/lib/utils'
@@ -32,10 +32,21 @@ import { InlineCitationsText, SourcesCountButton } from '@/components/inline-cit
 import { SourcesPanel } from '@/components/sources-panel'
 import { KnowledgeBaseReference, KnowledgeBaseActivityRecord } from '@/types/knowledge-retrieval'
 
+interface KnowledgeSource {
+  name: string
+  kind?: string
+  azureBlobParameters?: {
+    createdResources?: {
+      index?: string
+    }
+  }
+  [key: string]: any
+}
+
 interface KnowledgeBase {
   name: string
   description?: string
-  knowledgeSources?: any[]
+  knowledgeSources?: { name: string }[]
 }
 
 type Section = 'model' | 'tools' | 'instructions' | 'knowledge'
@@ -65,6 +76,7 @@ function AgentBuilderPageContent() {
   const [agentInstructions, setAgentInstructions] = useState('You are a helpful AI assistant. Answer questions clearly and accurately based on the available knowledge sources.')
   const [selectedModel, setSelectedModel] = useState('gpt-4.1')
   const [knowledgeBases, setKnowledgeBases] = useState<KnowledgeBase[]>([])
+  const [knowledgeSourcesMap, setKnowledgeSourcesMap] = useState<Map<string, KnowledgeSource>>(new Map())
   const [selectedKnowledgeBases, setSelectedKnowledgeBases] = useState<Set<string>>(new Set())
   const [enabledTools, setEnabledTools] = useState({
     codeInterpreter: false,
@@ -72,19 +84,18 @@ function AgentBuilderPageContent() {
     webSearch: false
   })
 
-  // Track whether the agent has azure_ai_search configured (for tool_choice forcing)
-  const [hasSearchTool, setHasSearchTool] = useState(false)
+  // Track whether the agent has MCP knowledge base tools configured
+  const [hasKnowledgeTools, setHasKnowledgeTools] = useState(false)
 
-  // Foundry agent state
-  const [assistantId, setAssistantId] = useState<string | null>(existingAssistantId || null)
-  const [threadId, setThreadId] = useState<string | null>(null)
-  const [runId, setRunId] = useState<string | null>(null)
+  // Foundry agent state (v2 API — name-based, not asst_ IDs)
+  const [agentName_saved, setAgentNameSaved] = useState<string | null>(existingAssistantId || null)
+  const [conversationId, setConversationId] = useState<string | null>(null)
   const [messages, setMessages] = useState<any[]>([])
   const [currentMessage, setCurrentMessage] = useState('')
   const [isRunning, setIsRunning] = useState(false)
 
-  // Thread management
-  const [threads, setThreads] = useState<any[]>([])
+  // Conversation management (replaces threads)
+  const [conversations, setConversations] = useState<any[]>([])
   const [showCodeModal, setShowCodeModal] = useState(false)
 
   // Sources panel state (Perplexity-style side panel for citations)
@@ -104,76 +115,124 @@ function AgentBuilderPageContent() {
     setSourcesPanel(prev => ({ ...prev, isOpen: false }))
   }
 
+  // Save settings state — explicit save to Foundry
+  const [savingSettings, setSavingSettings] = useState(false)
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'saved' | 'error'>('idle')
+  const [settingsDirty, setSettingsDirty] = useState(false)
+
   useEffect(() => {
     const init = async () => {
       // Load knowledge bases first
       await loadKnowledgeBases()
 
-      // THEN load existing assistant details (overrides selectedKnowledgeBases)
-      if (existingAssistantId && mode === 'playground') {
-        await loadExistingAssistantDetails()
-        createThread().then(thread => {
-          setThreadId(thread.id)
-          setThreads([{
-            id: thread.id,
+      // THEN load existing agent details (v2 API — by name)
+      if (existingAssistantId) {
+        await loadExistingAgentDetails()
+        try {
+          const conv = await createConversation()
+          setConversationId(conv.id)
+          setConversations([{
+            id: conv.id,
             created_at: new Date().toISOString(),
             messages: []
           }])
-        }).catch(err => {
-          console.error('Failed to create thread for existing assistant:', err)
-        })
+        } catch (err) {
+          console.error('Failed to create conversation for existing agent:', err)
+        }
       }
     }
     init()
   }, [existingAssistantId, mode])
 
-  const loadExistingAssistantDetails = async () => {
+  const loadExistingAgentDetails = async () => {
+    if (!existingAssistantId) return
+
+    try {
+      const response = await fetch(`/api/foundry/agents/${encodeURIComponent(existingAssistantId)}`)
+      if (response.ok) {
+        const agent = await response.json()
+        console.log('Loaded existing agent (v2):', agent)
+
+        // Extract agent details from the latest version definition
+        const latestDef = agent.versions?.latest?.definition || agent.definition || {}
+
+        if (agent.name) setAgentName(agent.name)
+        if (latestDef.instructions) setAgentInstructions(latestDef.instructions)
+        if (latestDef.model) setSelectedModel(latestDef.model)
+
+        // Reverse-map: find which KBs are configured as MCP tools
+        const tools = latestDef.tools || []
+        const mcpTools = tools.filter((t: any) => t.type === 'mcp')
+        if (mcpTools.length > 0) {
+          // Extract KB names from MCP server_url patterns
+          const matchedKBs = new Set<string>()
+          for (const mcp of mcpTools) {
+            const serverUrl = mcp.server_url || ''
+            const match = serverUrl.match(/\/knowledgebases\/([^/]+)\/mcp/)
+            if (match) {
+              matchedKBs.add(match[1])
+            }
+          }
+          if (matchedKBs.size > 0) {
+            setSelectedKnowledgeBases(matchedKBs)
+            setHasKnowledgeTools(true)
+          }
+        }
+
+        // Restore optional tool toggles
+        if (tools.length > 0) {
+          setEnabledTools({
+            codeInterpreter: tools.some((t: any) => t.type === 'code_interpreter'),
+            fileSearch: tools.some((t: any) => t.type === 'file_search'),
+            webSearch: tools.some((t: any) => t.type === 'bing_grounding'),
+          })
+        }
+
+        setAgentNameSaved(agent.name)
+      } else {
+        // Fallback: try loading as classic assistant
+        console.warn('Agent not found in v2 API, trying classic...')
+        await loadExistingAssistantDetailsClassic()
+      }
+    } catch (err) {
+      console.error('Error loading existing agent details:', err)
+    }
+  }
+
+  /** Fallback: load classic assistant details (for backward compat) */
+  const loadExistingAssistantDetailsClassic = async () => {
     if (!existingAssistantId) return
 
     try {
       const response = await fetch(`/api/foundry/assistants/${existingAssistantId}`)
       if (response.ok) {
         const assistant = await response.json()
-        console.log('Loaded existing assistant:', assistant)
+        console.log('Loaded classic assistant (fallback):', assistant)
 
-        // Update agent details
         if (assistant.name) setAgentName(assistant.name)
         if (assistant.instructions) setAgentInstructions(assistant.instructions)
         if (assistant.model) setSelectedModel(assistant.model)
-
-        // Extract knowledge bases from azure_ai_search tool_resources
-        const searchIndexes = assistant.tool_resources?.azure_ai_search?.indexes
-        if (searchIndexes && searchIndexes.length > 0) {
-          setHasSearchTool(true)
-          const kbNames = searchIndexes.map((idx: any) => {
-            // Strip '-index' suffix to get knowledge source / KB name
-            const name = idx.index_name || ''
-            return name.endsWith('-index') ? name.slice(0, -6) : name
-          }).filter(Boolean)
-          setSelectedKnowledgeBases(new Set(kbNames))
-        }
-
-        // Restore optional tool toggles
-        if (assistant.tools) {
-          setEnabledTools({
-            codeInterpreter: assistant.tools.some((t: any) => t.type === 'code_interpreter'),
-            fileSearch: assistant.tools.some((t: any) => t.type === 'file_search'),
-            webSearch: assistant.tools.some((t: any) => t.type === 'bing_grounding'),
-          })
-        }
-      } else {
-        console.error('Failed to load existing assistant details')
       }
     } catch (err) {
-      console.error('Error loading existing assistant details:', err)
+      console.error('Error loading classic assistant:', err)
     }
   }
 
   const loadKnowledgeBases = async () => {
     try {
       setLoading(true)
-  const data = await fetchKnowledgeBases()
-      setKnowledgeBases(data.value || [])
+      // Fetch knowledge bases and knowledge sources in parallel
+      const [kbData, ksData] = await Promise.all([
+        fetchKnowledgeBases(),
+        fetchKnowledgeSources()
+      ])
+      setKnowledgeBases(kbData.value || [])
+      // Build a Map of source name → full source details (includes kind, createdResources, etc.)
+      const srcMap = new Map<string, KnowledgeSource>()
+      for (const src of (ksData.value || [])) {
+        srcMap.set(src.name, src)
+      }
+      setKnowledgeSourcesMap(srcMap)
       // Start with no knowledge bases selected by default
       setSelectedKnowledgeBases(new Set())
     } catch (err) {
@@ -181,6 +240,15 @@ function AgentBuilderPageContent() {
     } finally {
       setLoading(false)
     }
+  }
+
+  /**
+   * Get the list of selected knowledge base names.
+   * With the v2 API and MCP tools, we pass KB names directly to the server
+   * which builds the MCP tool definitions. No more resolving to search indexes!
+   */
+  const getSelectedKBNames = (): string[] => {
+    return Array.from(selectedKnowledgeBases)
   }
 
   const handleKnowledgeBaseToggle = (baseName: string) => {
@@ -193,6 +261,7 @@ function AgentBuilderPageContent() {
       }
       return newSet
     })
+    setSettingsDirty(true)
   }
 
   const handleCreateNewKnowledgeBase = () => {
@@ -203,70 +272,44 @@ function AgentBuilderPageContent() {
   const handleSaveAgent = async () => {
     setSaving(true)
     try {
-      // Build tools array
+      // Build optional tools array (MCP tools are built server-side from KB names)
       const tools: any[] = []
-
-      // Add Azure AI Search tool if knowledge bases are selected
-      if (selectedKnowledgeBases.size > 0) {
-        tools.push({ type: 'azure_ai_search' })
-      }
-
-      // Add optional tools
       if (enabledTools.codeInterpreter) tools.push({ type: 'code_interpreter' })
       if (enabledTools.fileSearch) tools.push({ type: 'file_search' })
 
-      // Build tool_resources for Azure AI Search indexes
-      const toolResources: any = {}
-      if (selectedKnowledgeBases.size > 0) {
-        // Each selected KB's knowledge sources map to search indexes
-        // The index name convention is {source-name}-index
-        const indexes = Array.from(selectedKnowledgeBases).flatMap(kbName => {
-          const kb = knowledgeBases.find(b => b.name === kbName)
-          if (kb?.knowledgeSources && kb.knowledgeSources.length > 0) {
-            return kb.knowledgeSources.map(src => ({
-              index_connection_id: 'aikb-search', // Server will inject from env
-              index_name: `${src.name}-index`
-            }))
-          }
-          // Fallback: use KB name itself as index prefix
-          return [{ index_connection_id: 'aikb-search', index_name: `${kbName}-index` }]
-        })
-
-        toolResources.azure_ai_search = { indexes }
-        setHasSearchTool(true)
-      }
-
-      // Create the Foundry assistant
-      const assistantData = {
+      // Create the agent via v2 API
+      // Server handles building MCP tool definitions from knowledgeBases list
+      const agentData = {
         name: agentName,
-        instructions: agentInstructions,
         model: selectedModel,
-        tools,
-        tool_resources: Object.keys(toolResources).length > 0 ? toolResources : undefined
+        instructions: agentInstructions,
+        knowledgeBases: getSelectedKBNames(),
+        tools: tools.length > 0 ? tools : undefined,
       }
 
-      console.log('Creating assistant with data:', assistantData)
-      const assistant = await createFoundryAgent(assistantData)
-      console.log('Created assistant:', assistant)
+      console.log('Creating agent (v2) with data:', agentData)
+      const agent = await createFoundryAgentV2(agentData)
+      console.log('Created agent (v2):', agent)
 
-      setAssistantId(assistant.id)
+      setAgentNameSaved(agent.name)
+      setHasKnowledgeTools(getSelectedKBNames().length > 0)
 
-      // Create a thread automatically
-      const thread = await createThread()
-      setThreadId(thread.id)
+      // Create a conversation automatically
+      const conv = await createConversation()
+      setConversationId(conv.id)
 
-      // Add to threads list
-      setThreads([{
-        id: thread.id,
+      // Add to conversations list
+      setConversations([{
+        id: conv.id,
         created_at: new Date().toISOString(),
         messages: []
       }])
 
-      console.log('Agent created successfully:', { assistantId: assistant.id, threadId: thread.id })
+      console.log('Agent created successfully:', { agentName: agent.name, conversationId: conv.id })
 
-      // Automatically transition to playground mode by updating URL
+      // Automatically transition to playground mode
       const newUrl = new URL(window.location.href)
-      newUrl.searchParams.set('assistantId', assistant.id)
+      newUrl.searchParams.set('assistantId', agent.name)
       newUrl.searchParams.set('mode', 'playground')
       window.history.replaceState({}, '', newUrl.toString())
 
@@ -278,24 +321,44 @@ function AgentBuilderPageContent() {
     }
   }
 
-  const createThread = async () => {
-    const response = await fetch('/api/foundry/threads', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({})
-    })
-
-    if (!response.ok) {
-      throw new Error('Failed to create thread')
+  const handleCreateNewConversation = async () => {
+    try {
+      const conv = await createConversation()
+      setConversations(prev => [{
+        id: conv.id,
+        created_at: new Date().toISOString(),
+        messages: []
+      }, ...prev])
+      switchToConversation(conv.id)
+    } catch (err) {
+      console.error('Failed to create new conversation:', err)
     }
+  }
 
-    return response.json()
+  const switchToConversation = (newConversationId: string) => {
+    setConversationId(newConversationId)
+    setMessages([])
+    setCurrentMessage('')
+    setIsRunning(false)
+  }
+
+  const deleteConversation = async (convIdToDelete: string) => {
+    // Remove from local state
+    setConversations(prev => prev.filter(c => c.id !== convIdToDelete))
+
+    if (conversationId === convIdToDelete) {
+      const remaining = conversations.filter(c => c.id !== convIdToDelete)
+      if (remaining.length > 0) {
+        switchToConversation(remaining[0].id)
+      } else {
+        setConversationId(null)
+        setMessages([])
+      }
+    }
   }
 
   const sendMessage = async () => {
-    if (!currentMessage.trim() || !assistantId || !threadId || isRunning) return
+    if (!currentMessage.trim() || !agentName_saved || !conversationId || isRunning) return
 
     setIsRunning(true)
     const userMessage = currentMessage.trim()
@@ -311,71 +374,44 @@ function AgentBuilderPageContent() {
     setMessages(prev => [...prev, newUserMessage])
 
     try {
-      // Add message to thread
-      const msgResponse = await fetch('/api/foundry/messages', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          threadId,
-          role: 'user',
-          content: userMessage
-        })
+      // Ensure the agent has the latest settings before sending
+      if (settingsDirty) {
+        await updateAgentDetails()
+        setSettingsDirty(false)
+      }
+
+      // Send message and get response — SYNCHRONOUS, no polling needed!
+      const responseData = await sendAgentResponse({
+        conversationId,
+        agentName: agentName_saved,
+        input: userMessage,
       })
 
-      if (!msgResponse.ok) {
-        const msgErr = await msgResponse.json().catch(() => ({}))
-        // If there's an active run, wait for it to complete then retry
-        if (msgErr?.error?.includes?.('active run') || msgErr?.details?.error?.message?.includes?.('active run')) {
-          if (runId) {
-            await pollRunStatus(runId)
-          }
-          // Retry adding message after the run completes
-          const retryResp = await fetch('/api/foundry/messages', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ threadId, role: 'user', content: userMessage })
-          })
-          if (!retryResp.ok) {
-            throw new Error('Failed to add message after waiting for active run')
-          }
-        } else {
-          throw new Error(msgErr?.error || 'Failed to add message to thread')
-        }
-      }
-
-      // Create run — force azure_ai_search tool when knowledge bases are
-      // attached so the model grounds its answers instead of using training data
-      const runPayload: Record<string, unknown> = {
-        threadId,
-        assistantId,
-      }
-      if (hasSearchTool || selectedKnowledgeBases.size > 0) {
-        runPayload.tool_choice = { type: 'azure_ai_search' }
-      }
-      const runResponse = await fetch('/api/foundry/runs', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(runPayload)
+      console.log('[v2] Response received:', {
+        id: responseData.id,
+        status: responseData.status,
+        outputCount: responseData.output?.length || 0,
       })
 
-      if (!runResponse.ok) {
-        const runErr = await runResponse.json().catch(() => ({}))
-        throw new Error(runErr?.error || 'Failed to create run')
-      }
+      // Extract the assistant message and references from the response output
+      const { text, references, mcpCalls, activity } = extractResponseContent(responseData)
 
-      const run = await runResponse.json()
-      setRunId(run.id)
-
-      // Poll for completion
-      await pollRunStatus(run.id)
+      const msgId = `msg-${Date.now()}`
+      setMessages(prev => [...prev, {
+        id: msgId,
+        role: 'assistant',
+        content: text,
+        timestamp: new Date().toISOString(),
+        toolCalls: mcpCalls,
+        responseId: responseData.id,
+        references,
+        activity,
+      }])
 
     } catch (err) {
       console.error('Failed to send message:', err)
       setMessages(prev => [...prev, {
+        id: `err-${Date.now()}`,
         role: 'assistant',
         content: `Error: ${err.message}`,
         timestamp: new Date().toISOString()
@@ -385,208 +421,186 @@ function AgentBuilderPageContent() {
     }
   }
 
-  const pollRunStatus = async (runId: string) => {
-    const maxAttempts = 30 // 30 seconds timeout
-    let attempts = 0
+  /**
+   * Extract text content, references, and tool calls from a v2 response.
+   *
+   * The response.output array may contain:
+   * - { type: "function_call", name: "knowledge_base_retrieve", ... } — KB retrieval invocation
+   * - { type: "function_call_output", output: "...", _rawRetrieval: {...} } — KB retrieval results
+   * - { type: "mcp_call", ... } — MCP tool invocation (legacy, kept for backward compat)
+   * - { type: "mcp_call_output", output: "..." } — MCP tool result
+   * - { type: "message", role: "assistant", content: [{ type: "output_text", text: "..." }] }
+   */
+  const extractResponseContent = (responseData: any): {
+    text: string
+    references: KnowledgeBaseReference[]
+    mcpCalls: any[]
+    activity: KnowledgeBaseActivityRecord[]
+  } => {
+    const output = responseData.output || []
+    let text = ''
+    const references: KnowledgeBaseReference[] = []
+    const mcpCalls: any[] = []
+    const activity: KnowledgeBaseActivityRecord[] = []
 
-    while (attempts < maxAttempts) {
-      try {
-        const response = await fetch(`/api/foundry/runs/${runId}?threadId=${threadId}`)
-        if (!response.ok) break
+    for (const item of output) {
+      if (item.type === 'message' && item.role === 'assistant') {
+        // Extract text from message content
+        for (const content of (item.content || [])) {
+          if (content.type === 'output_text') {
+            text += content.text || ''
+          }
+        }
 
-        const run = await response.json()
-
-        if (run.status === 'completed') {
-          // Fetch messages to get the response
-          const messagesResponse = await fetch(`/api/foundry/messages?threadId=${threadId}`)
-          if (messagesResponse.ok) {
-            const threadMessages = await messagesResponse.json()
-            const latestMessages = threadMessages.data || []
-
-            // Find the latest assistant message
-            const assistantMessages = latestMessages
-              .filter(msg => msg.role === 'assistant')
-              .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
-
-            if (assistantMessages.length > 0) {
-              const latestAssistant = assistantMessages[0]
-              const textContent = latestAssistant.content[0]?.text
-              let rawText = textContent?.value || 'No response content'
-              const annotations = textContent?.annotations || []
-
-              // Transform Foundry annotations into KnowledgeBaseReference[]
-              // and replace annotation markers with [ref_id:N]
-              const references: KnowledgeBaseReference[] = []
-              if (annotations.length > 0) {
-                // Sort annotations by start_index descending so we can replace from end to start
-                const sorted = [...annotations].sort((a: any, b: any) => (b.start_index ?? 0) - (a.start_index ?? 0))
-                sorted.forEach((ann: any) => {
-                  const refIdx = references.length
-
-                  if (ann.type === 'url_citation' && ann.url_citation) {
-                    references.push({
-                      type: 'web',
-                      id: String(refIdx),
-                      activitySource: 0,
-                      url: ann.url_citation.url || '',
-                      title: ann.url_citation.title || ann.url_citation.url || '',
-                      sourceData: { title: ann.url_citation.title, content: '' }
-                    } as any)
-                  } else if (ann.type === 'file_citation' && ann.file_citation) {
-                    references.push({
-                      type: 'searchIndex',
-                      id: String(refIdx),
-                      activitySource: 0,
-                      docKey: ann.file_citation.file_id || '',
-                      sourceData: { title: ann.file_citation.quote || 'Document', content: ann.file_citation.quote || '' }
-                    } as any)
-                  } else {
-                    // Generic fallback for other annotation types
-                    references.push({
-                      type: 'searchIndex',
-                      id: String(refIdx),
-                      activitySource: 0,
-                      docKey: ann.text || '',
-                      sourceData: { title: ann.text || 'Source', content: '' }
-                    } as any)
-                  }
-
-                  // Replace the annotation marker text with [ref_id:N]
-                  if (typeof ann.start_index === 'number' && typeof ann.end_index === 'number') {
-                    rawText = rawText.slice(0, ann.start_index) + `[ref_id:${refIdx}]` + rawText.slice(ann.end_index)
-                  }
-                })
-                // Reverse references since we built them in descending order
-                references.reverse()
-              }
-
-              const msgId = `msg-${Date.now()}`
-              setMessages(prev => [...prev, {
-                id: msgId,
-                role: 'assistant',
-                content: rawText,
-                timestamp: new Date().toISOString(),
-                toolCalls: run.tool_calls || [],
-                runId: run.id,
-                references,
-                activity: []
-              }])
+        // Extract annotations/citations from message content
+        for (const content of (item.content || [])) {
+          const annotations = content.annotations || []
+          for (const ann of annotations) {
+            const refIdx = references.length
+            if (ann.type === 'url_citation' && ann.url_citation) {
+              references.push({
+                type: 'web',
+                id: String(refIdx),
+                activitySource: 0,
+                url: ann.url_citation.url || '',
+                title: ann.url_citation.title || ann.url_citation.url || '',
+                sourceData: { title: ann.url_citation.title, content: '' }
+              } as any)
+            } else if (ann.type === 'file_citation' && ann.file_citation) {
+              references.push({
+                type: 'searchIndex',
+                id: String(refIdx),
+                activitySource: 0,
+                docKey: ann.file_citation.file_id || '',
+                sourceData: { title: ann.file_citation.quote || 'Document', content: ann.file_citation.quote || '' }
+              } as any)
             }
           }
-          break
-        } else if (run.status === 'failed') {
-          setMessages(prev => [...prev, {
-            role: 'assistant',
-            content: `Run failed: ${run.last_error?.message || 'Unknown error'}`,
-            timestamp: new Date().toISOString()
-          }])
-          break
         }
-
-        attempts++
-        await new Promise(resolve => setTimeout(resolve, 1000))
-      } catch (err) {
-        console.error('Error polling run status:', err)
-        break
+      } else if (item.type === 'function_call' && item.name === 'knowledge_base_retrieve') {
+        // Function-tool KB retrieval call (current approach)
+        let args: any = {}
+        try {
+          args = typeof item.arguments === 'string' ? JSON.parse(item.arguments) : (item.arguments || {})
+        } catch { /* ignore */ }
+        mcpCalls.push({
+          type: 'function',
+          name: 'knowledge_base_retrieve',
+          server_label: args.knowledge_base || '',
+          arguments: args,
+        })
+      } else if (item.type === 'function_call_output') {
+        // Function-tool KB retrieval results — extract references from _rawRetrieval
+        const rawRetrieval = item._rawRetrieval
+        if (rawRetrieval?.references) {
+          for (const ref of rawRetrieval.references) {
+            // Spread the raw reference to preserve type-specific fields
+            // like blobUrl, webUrl, docUrl that the sources-panel needs
+            references.push({
+              ...ref,
+              id: String(references.length),
+              activitySource: ref.activitySource ?? 0,
+            } as any)
+          }
+        }
+        // Also extract activity records for retrieval journey display
+        if (rawRetrieval?.activity) {
+          activity.push(...rawRetrieval.activity)
+        }
+      } else if (item.type === 'mcp_call') {
+        // Legacy MCP tool call (kept for backward compat)
+        mcpCalls.push({
+          type: 'mcp',
+          name: item.name || 'knowledge_base_retrieve',
+          server_label: item.server_label || '',
+          arguments: item.arguments,
+        })
+      } else if (item.type === 'mcp_call_output') {
+        // Legacy MCP tool results
+        try {
+          const mcpOutput = typeof item.output === 'string' ? JSON.parse(item.output) : item.output
+          if (mcpOutput?.references) {
+            for (const ref of mcpOutput.references) {
+              references.push({
+                type: ref.type || 'searchIndex',
+                id: String(references.length),
+                activitySource: 0,
+                docKey: ref.docKey || ref.id || '',
+                url: ref.url || '',
+                title: ref.title || '',
+                sourceData: ref.sourceData || { title: ref.title, content: ref.content || '' }
+              } as any)
+            }
+          }
+        } catch {
+          // MCP output may not be JSON — that's fine
+        }
       }
     }
-  }
 
-  const createNewThread = async () => {
-    if (!assistantId) return
-
-    try {
-      const thread = await createThread()
-      setThreads(prev => [{
-        id: thread.id,
-        created_at: new Date().toISOString(),
-        messages: []
-      }, ...prev])
-
-      // Switch to the new thread
-      switchToThread(thread.id)
-    } catch (err) {
-      console.error('Failed to create new thread:', err)
+    if (!text) {
+      text = 'No response content received.'
     }
+
+    return { text, references, mcpCalls, activity }
   }
 
-  const switchToThread = (newThreadId: string) => {
-    setThreadId(newThreadId)
-    setMessages([])
-    setCurrentMessage('')
-    setRunId(null)
-    setIsRunning(false)
-  }
-
-  const deleteThread = async (threadIdToDelete: string) => {
-    try {
-      // Remove from local state
-      setThreads(prev => prev.filter(t => t.id !== threadIdToDelete))
-
-      // If it was the active thread, switch to another or clear
-      if (threadId === threadIdToDelete) {
-        const remainingThreads = threads.filter(t => t.id !== threadIdToDelete)
-        if (remainingThreads.length > 0) {
-          switchToThread(remainingThreads[0].id)
-        } else {
-          setThreadId(null)
-          setMessages([])
-        }
-      }
-    } catch (err) {
-      console.error('Failed to delete thread:', err)
-    }
-  }
-
-  const updateAssistantDetails = async () => {
-    if (!assistantId) return
+  const updateAgentDetails = async (): Promise<boolean> => {
+    if (!agentName_saved) return false
 
     try {
-      // Build tools array
+      // Build optional tools array
       const tools: any[] = []
-      if (selectedKnowledgeBases.size > 0) {
-        tools.push({ type: 'azure_ai_search' })
-      }
       if (enabledTools.codeInterpreter) tools.push({ type: 'code_interpreter' })
       if (enabledTools.fileSearch) tools.push({ type: 'file_search' })
 
-      // Build tool_resources for Azure AI Search
-      const toolResources: any = {}
-      if (selectedKnowledgeBases.size > 0) {
-        const indexes = Array.from(selectedKnowledgeBases).flatMap(kbName => {
-          const kb = knowledgeBases.find(b => b.name === kbName)
-          if (kb?.knowledgeSources && kb.knowledgeSources.length > 0) {
-            return kb.knowledgeSources.map(src => ({
-              index_connection_id: 'aikb-search',
-              index_name: `${src.name}-index`
-            }))
-          }
-          return [{ index_connection_id: 'aikb-search', index_name: `${kbName}-index` }]
-        })
-        toolResources.azure_ai_search = { indexes }
-        setHasSearchTool(true)
-      }
+      const kbNames = getSelectedKBNames()
+      setHasKnowledgeTools(kbNames.length > 0)
 
-      const response = await fetch(`/api/foundry/assistants/${assistantId}`, {
+      const response = await fetch(`/api/foundry/agents/${encodeURIComponent(agentName_saved)}`, {
         method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json'
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          name: agentName,
+          model: selectedModel,
           instructions: agentInstructions,
-          tools,
-          tool_resources: Object.keys(toolResources).length > 0 ? toolResources : undefined
+          knowledgeBases: kbNames,
+          tools: tools.length > 0 ? tools : undefined,
         })
       })
 
       if (response.ok) {
-        console.log('Assistant details updated successfully')
+        console.log('Agent details updated successfully (v2)')
+        return true
       } else {
-        console.error('Failed to update assistant details')
+        const errData = await response.json().catch(() => ({}))
+        console.error('Failed to update agent details:', errData)
+        return false
       }
     } catch (err) {
-      console.error('Error updating assistant details:', err)
+      console.error('Error updating agent details:', err)
+      return false
+    }
+  }
+
+  const handleSaveSettings = async () => {
+    setSavingSettings(true)
+    setSaveStatus('idle')
+    try {
+      const success = await updateAgentDetails()
+      if (success) {
+        setSettingsDirty(false)
+        setSaveStatus('saved')
+        setTimeout(() => setSaveStatus('idle'), 3000)
+      } else {
+        setSaveStatus('error')
+        setTimeout(() => setSaveStatus('idle'), 4000)
+      }
+    } catch (err) {
+      console.error('Failed to save settings:', err)
+      setSaveStatus('error')
+      setTimeout(() => setSaveStatus('idle'), 4000)
+    } finally {
+      setSavingSettings(false)
     }
   }
 
@@ -759,7 +773,13 @@ function AgentBuilderPageContent() {
                         if (!base) return null
 
                         const sourceCount = base.knowledgeSources?.length || 0
-                        const sourceTypes = base.knowledgeSources?.map(ks => ks.kind || 'unknown').filter((v, i, a) => a.indexOf(v) === i) || []
+                        // Look up source kinds from the enriched knowledgeSourcesMap
+                        const sourceTypes = base.knowledgeSources?.map(ks => {
+                          const srcDetail = knowledgeSourcesMap.get(ks.name)
+                          return srcDetail?.kind || 'unknown'
+                        }).filter((v, i, a) => a.indexOf(v) === i) || []
+                        // Check if this KB has any indexed sources
+                        const hasIndexedSource = true // MCP tools handle all source types
 
                         return (
                           <div
@@ -775,6 +795,11 @@ function AgentBuilderPageContent() {
                                 Knowledge Base • {sourceCount} source{sourceCount !== 1 ? 's' : ''}
                                 {sourceTypes.length > 0 && ` • ${sourceTypes.join(', ')}`}
                               </p>
+                              {!hasIndexedSource && (
+                                <p className="text-xs text-amber-600 dark:text-amber-400 mt-0.5">
+                                  ⚠ No knowledge sources found in this KB
+                                </p>
+                              )}
                               {base.description && (
                                 <p className="text-xs text-fg-muted mt-1">{base.description}</p>
                               )}
@@ -815,44 +840,42 @@ function AgentBuilderPageContent() {
   }
 
   // Show chat interface if agent is created
-  if (assistantId) {
+  if (agentName_saved) {
     return (
       <div className="flex h-[calc(100vh-3.5rem)] bg-bg-primary">
-        {/* Left Panel - Agent Info & Threads */}
+        {/* Left Panel - Agent Info & Conversations */}
         <div className="w-80 bg-bg-secondary border-r border-stroke-divider flex flex-col">
           <div className="p-4 border-b border-stroke-divider">
             <input
               value={agentName}
-              onChange={(e) => setAgentName(e.target.value)}
+              onChange={(e) => { setAgentName(e.target.value); setSettingsDirty(true) }}
               className="text-lg font-semibold bg-transparent border-0 focus:ring-1 focus:ring-stroke-focus rounded px-1 w-full"
               placeholder="Agent name"
             />
             <div className="mt-2 space-y-1">
               <div className="flex items-center gap-2">
-                <span className="text-xs font-medium text-fg-muted">Foundry Agent:</span>
-                <code className="text-xs bg-bg-tertiary px-2 py-0.5 rounded font-mono">{assistantId}</code>
+                <span className="text-xs font-medium text-fg-muted">Agent:</span>
+                <code className="text-xs bg-bg-tertiary px-2 py-0.5 rounded font-mono">{agentName_saved}</code>
               </div>
               <div className="flex items-center gap-2">
-                <span className="text-xs font-medium text-fg-muted">Thread:</span>
-                <code className="text-xs bg-bg-tertiary px-2 py-0.5 rounded font-mono">{threadId}</code>
+                <span className="text-xs font-medium text-fg-muted">Conversation:</span>
+                <code className="text-xs bg-bg-tertiary px-2 py-0.5 rounded font-mono">{conversationId ? conversationId.slice(-12) : 'none'}</code>
               </div>
-              {runId && (
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-medium text-fg-muted">Run:</span>
-                  <code className="text-xs bg-bg-tertiary px-2 py-0.5 rounded font-mono">{runId}</code>
-                </div>
-              )}
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-medium text-fg-muted">API:</span>
+                <span className="text-xs px-2 py-0.5 rounded bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 font-medium">v2 (MCP)</span>
+              </div>
             </div>
           </div>
 
-          {/* Thread Management */}
+          {/* Conversation Management */}
           <div className="p-4 border-b border-stroke-divider">
             <div className="flex items-center justify-between mb-3">
-              <h3 className="text-sm font-semibold">Threads</h3>
+              <h3 className="text-sm font-semibold">Conversations</h3>
               <Button
                 size="sm"
                 variant="ghost"
-                onClick={createNewThread}
+                onClick={handleCreateNewConversation}
                 className="gap-1"
               >
                 <Add20Regular className="h-4 w-4" />
@@ -861,22 +884,22 @@ function AgentBuilderPageContent() {
             </div>
 
             <div className="space-y-1 max-h-48 overflow-auto">
-              {threads.map((thread) => (
+              {conversations.map((conv) => (
                 <div
-                  key={thread.id}
+                  key={conv.id}
                   className={cn(
                     "flex items-center gap-2 p-2 rounded text-xs cursor-pointer hover:bg-bg-hover",
-                    thread.id === threadId ? "bg-bg-accent-subtle text-fg-accent" : ""
+                    conv.id === conversationId ? "bg-bg-accent-subtle text-fg-accent" : ""
                   )}
-                  onClick={() => switchToThread(thread.id)}
+                  onClick={() => switchToConversation(conv.id)}
                 >
                   <History20Regular className="h-3 w-3 flex-shrink-0" />
                   <div className="flex-1 min-w-0">
                     <div className="truncate font-medium">
-                      Thread {thread.id.slice(-8)}
+                      Conv {conv.id.slice(-8)}
                     </div>
                     <div className="text-fg-muted">
-                      {new Date(thread.created_at).toLocaleTimeString()}
+                      {new Date(conv.created_at).toLocaleTimeString()}
                     </div>
                   </div>
                   <Button
@@ -884,7 +907,7 @@ function AgentBuilderPageContent() {
                     variant="ghost"
                     onClick={(e) => {
                       e.stopPropagation()
-                      deleteThread(thread.id)
+                      deleteConversation(conv.id)
                     }}
                     className="opacity-0 group-hover:opacity-100"
                   >
@@ -893,9 +916,9 @@ function AgentBuilderPageContent() {
                 </div>
               ))}
 
-              {threads.length === 0 && (
+              {conversations.length === 0 && (
                 <div className="text-xs text-fg-muted text-center py-4">
-                  No threads yet
+                  No conversations yet
                 </div>
               )}
             </div>
@@ -947,7 +970,7 @@ function AgentBuilderPageContent() {
                   <div key={baseName} className="flex items-center justify-between text-xs p-2 bg-bg-tertiary rounded">
                     <div className="flex-1 min-w-0">
                       <div className="font-medium truncate">{baseName}</div>
-                      <div className="text-fg-muted">MCP Tool: {baseName.replace(/-/g, '_')}</div>
+                      <div className="text-fg-muted">MCP Tool: kb_{baseName.replace(/[^a-zA-Z0-9_]/g, '_')}</div>
                     </div>
                     <button
                       onClick={() => handleKnowledgeBaseToggle(baseName)}
@@ -979,7 +1002,7 @@ function AgentBuilderPageContent() {
               <div className="space-y-2">
                 <textarea
                   value={agentInstructions}
-                  onChange={(e) => setAgentInstructions(e.target.value)}
+                  onChange={(e) => { setAgentInstructions(e.target.value); setSettingsDirty(true) }}
                   placeholder="Enter system instructions..."
                   className="w-full text-xs p-2 bg-bg-tertiary rounded resize-none border-0 focus:ring-1 focus:ring-stroke-focus"
                   rows={4}
@@ -991,24 +1014,36 @@ function AgentBuilderPageContent() {
             </div>
           </div>
 
-          <div className="p-4 border-t border-stroke-divider">
+          <div className="p-4 border-t border-stroke-divider space-y-2">
+            <Button
+              className="w-full"
+              onClick={handleSaveSettings}
+              disabled={savingSettings}
+            >
+              {savingSettings
+                ? 'Saving...'
+                : saveStatus === 'saved'
+                ? '\u2713 Saved to Foundry'
+                : saveStatus === 'error'
+                ? '\u2717 Save Failed \u2014 Retry'
+                : settingsDirty
+                ? 'Save Settings \u2022'
+                : 'Save Settings'}
+            </Button>
             <Button
               variant="secondary"
               className="w-full"
               onClick={async () => {
-                // Save agent details before going back
-                await updateAssistantDetails()
+                // Auto-save unsaved changes before navigating away
+                if (settingsDirty) await updateAgentDetails()
 
                 if (mode === 'playground') {
-                  // If in playground mode, go back to agents
                   router.push('/agents')
                 } else {
-                  // If in builder mode, reset state
-                  setAssistantId(null)
-                  setThreadId(null)
-                  setRunId(null)
+                  setAgentNameSaved(null)
+                  setConversationId(null)
                   setMessages([])
-                  setThreads([])
+                  setConversations([])
                 }
               }}
             >
@@ -1265,8 +1300,8 @@ function AgentBuilderPageContent() {
         selectedKnowledgeBases={Array.from(selectedKnowledgeBases)}
         agentInstructions={agentInstructions}
         selectedModel={selectedModel}
-        assistantId={assistantId}
-        threadId={threadId}
+        assistantId={agentName_saved}
+        threadId={conversationId}
       />
     </div>
   )

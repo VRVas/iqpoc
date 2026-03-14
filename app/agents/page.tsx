@@ -31,6 +31,29 @@ import { formatRelativeTime } from '@/lib/utils'
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
+type FoundryAgentV2 = {
+  object: string
+  id: string
+  name: string
+  versions?: {
+    latest?: {
+      object: string
+      id: string
+      name: string
+      version: string
+      description: string
+      created_at: number
+      definition?: {
+        kind: string
+        model: string
+        instructions?: string
+        tools?: { type: string; server_label?: string; server_url?: string }[]
+      }
+    }
+  }
+}
+
+// Also keep classic type for backward compat
 type FoundryAssistant = {
   id: string
   name: string
@@ -46,12 +69,25 @@ type FoundryAssistant = {
   metadata?: Record<string, string>
 }
 
+// Unified display type
+type AgentDisplay = {
+  id: string
+  name: string
+  model: string
+  instructions?: string
+  tools: { type: string; server_label?: string }[]
+  knowledgeBases: string[]
+  created_at: number
+  apiVersion: 'v2' | 'classic'
+}
+
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 const TOOL_DISPLAY: Record<string, { label: string; Icon: React.ComponentType<{ className?: string }> }> = {
   azure_ai_search: { label: 'Azure AI Search', Icon: Search20Regular },
   code_interpreter: { label: 'Code Interpreter', Icon: Code20Regular },
   file_search: { label: 'File Search', Icon: DocumentSearch20Regular },
+  mcp: { label: 'Knowledge Base (MCP)', Icon: Search20Regular },
 }
 
 function getToolLabel(type: string) {
@@ -69,10 +105,10 @@ function AgentsPageContent() {
   const router = useRouter()
   const { toast } = useToast()
 
-  const [agents, setAgents] = useState<FoundryAssistant[]>([])
+  const [agents, setAgents] = useState<AgentDisplay[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [deleteDialog, setDeleteDialog] = useState<{ open: boolean; agent: FoundryAssistant | null }>({ open: false, agent: null })
+  const [deleteDialog, setDeleteDialog] = useState<{ open: boolean; agent: AgentDisplay | null }>({ open: false, agent: null })
   const [deleteConfirmName, setDeleteConfirmName] = useState('')
   const [deleteLoading, setDeleteLoading] = useState(false)
 
@@ -80,22 +116,91 @@ function AgentsPageContent() {
     fetchAgents()
   }, [])
 
+  /**
+   * Fetch agents from BOTH v2 and classic APIs, merge into unified display list.
+   * v2 agents take priority (shown first), classic shown after with a badge.
+   */
   const fetchAgents = async () => {
     try {
       setLoading(true)
       setError(null)
 
-      const response = await fetch('/api/foundry/assistants', {
-        cache: 'no-store',
-        headers: { 'Cache-Control': 'no-cache, no-store, must-revalidate' },
-      })
+      const displayAgents: AgentDisplay[] = []
 
-      if (!response.ok) {
-        throw new Error(`Failed to fetch agents: ${response.status}`)
+      // 1. Fetch v2 agents
+      try {
+        const v2Response = await fetch('/api/foundry/agents', {
+          cache: 'no-store',
+          headers: { 'Cache-Control': 'no-cache, no-store, must-revalidate' },
+        })
+        if (v2Response.ok) {
+          const v2Data = await v2Response.json()
+          const v2Agents: FoundryAgentV2[] = v2Data.data || []
+          for (const agent of v2Agents) {
+            const def = agent.versions?.latest?.definition
+            const tools = def?.tools || []
+            // Extract KB names from MCP tool server_urls
+            const kbNames: string[] = []
+            for (const tool of tools) {
+              if (tool.type === 'mcp' && tool.server_url) {
+                const match = tool.server_url.match(/\/knowledgebases\/([^/]+)\/mcp/)
+                if (match) kbNames.push(match[1])
+              }
+            }
+            displayAgents.push({
+              id: agent.name,
+              name: agent.name,
+              model: def?.model || 'unknown',
+              instructions: def?.instructions,
+              tools: tools.map(t => ({ type: t.type, server_label: t.server_label })),
+              knowledgeBases: kbNames,
+              created_at: agent.versions?.latest?.created_at || 0,
+              apiVersion: 'v2',
+            })
+          }
+        }
+      } catch (v2Err) {
+        console.warn('Failed to fetch v2 agents:', v2Err)
       }
 
-      const data = await response.json()
-      setAgents(data.data || [])
+      // 2. Fetch classic agents
+      try {
+        const classicResponse = await fetch('/api/foundry/assistants', {
+          cache: 'no-store',
+          headers: { 'Cache-Control': 'no-cache, no-store, must-revalidate' },
+        })
+        if (classicResponse.ok) {
+          const classicData = await classicResponse.json()
+          const classicAgents: FoundryAssistant[] = classicData.data || []
+          // Only add classic agents that don't exist in v2 (by name)
+          const v2Names = new Set(displayAgents.map(a => a.name))
+          for (const agent of classicAgents) {
+            if (!v2Names.has(agent.name)) {
+              const searchIndexes = agent.tool_resources?.azure_ai_search?.indexes ?? []
+              displayAgents.push({
+                id: agent.id,
+                name: agent.name,
+                model: agent.model,
+                instructions: agent.instructions,
+                tools: agent.tools || [],
+                knowledgeBases: searchIndexes.map(idx => getIndexDisplayName(idx.index_name)),
+                created_at: agent.created_at,
+                apiVersion: 'classic',
+              })
+            }
+          }
+        }
+      } catch (classicErr) {
+        console.warn('Failed to fetch classic agents:', classicErr)
+      }
+
+      if (displayAgents.length === 0) {
+        // If both failed, throw to show error state
+        const v2Resp = await fetch('/api/foundry/agents', { cache: 'no-store' })
+        if (!v2Resp.ok) throw new Error(`Failed to fetch agents: ${v2Resp.status}`)
+      }
+
+      setAgents(displayAgents)
     } catch (err: any) {
       setError(err.message || 'Failed to load agents')
       console.error('Error fetching agents:', err)
@@ -104,12 +209,18 @@ function AgentsPageContent() {
     }
   }
 
-  const handleDelete = async (agent: FoundryAssistant) => {
+  const handleDelete = async (agent: AgentDisplay) => {
     if (deleteConfirmName !== agent.name) return
 
     try {
       setDeleteLoading(true)
-      const response = await fetch(`/api/foundry/assistants/${agent.id}`, { method: 'DELETE' })
+
+      // Delete via appropriate API based on agent version
+      const deleteUrl = agent.apiVersion === 'v2'
+        ? `/api/foundry/agents/${encodeURIComponent(agent.name)}`
+        : `/api/foundry/assistants/${agent.id}`
+
+      const response = await fetch(deleteUrl, { method: 'DELETE' })
 
       if (!response.ok) {
         throw new Error('Failed to delete agent')
@@ -188,7 +299,6 @@ function AgentsPageContent() {
       ) : (
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
           {agents.map((agent) => {
-            const searchIndexes = agent.tool_resources?.azure_ai_search?.indexes ?? []
             const uniqueToolTypes = Array.from(new Set(agent.tools.map(t => t.type)))
             const createdDate = new Date(agent.created_at * 1000)
 
@@ -196,7 +306,7 @@ function AgentsPageContent() {
               <div key={agent.id} className="transform-gpu">
                 <Card
                   className="h-[380px] flex flex-col transition-all duration-200 cursor-pointer group relative overflow-hidden border-2 hover:border-accent/50 hover:shadow-xl hover:-translate-y-1"
-                  onClick={() => router.push(`/agent-builder?assistantId=${encodeURIComponent(agent.id)}`)}
+                  onClick={() => router.push(`/agent-builder?assistantId=${encodeURIComponent(agent.name)}&mode=playground`)}
                 >
                   {/* Hover gradient */}
                   <div className="absolute inset-0 bg-gradient-to-br from-accent/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none" />
@@ -214,6 +324,11 @@ function AgentsPageContent() {
                             {agent.model}
                           </span>
                           <StatusPill variant="success">active</StatusPill>
+                          {agent.apiVersion === 'v2' ? (
+                            <span className="rounded-full px-2 py-0.5 text-xs font-medium bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400">v2</span>
+                          ) : (
+                            <span className="rounded-full px-2 py-0.5 text-xs font-medium bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400">classic</span>
+                          )}
                         </div>
                       </div>
 
@@ -261,22 +376,22 @@ function AgentsPageContent() {
                       </div>
                     )}
 
-                    {/* Connected indexes */}
-                    {searchIndexes.length > 0 && (
+                    {/* Connected Knowledge Bases */}
+                    {agent.knowledgeBases.length > 0 && (
                       <div className="flex-1 min-h-0 flex flex-col">
                         <div className="mb-2 text-xs font-semibold text-fg-default flex items-center gap-1.5 flex-shrink-0">
                           <span className="w-2 h-2 bg-accent rounded-full animate-pulse" />
-                          {searchIndexes.length} Index{searchIndexes.length !== 1 ? 'es' : ''}
+                          {agent.knowledgeBases.length} Knowledge Base{agent.knowledgeBases.length !== 1 ? 's' : ''}
                         </div>
                         <div className="flex flex-wrap gap-1.5 content-start overflow-y-auto pr-1 custom-scrollbar thin max-h-[80px]">
-                          {searchIndexes.map((idx, i) => (
+                          {agent.knowledgeBases.map((kbName, i) => (
                             <span
                               key={i}
                               className="inline-flex items-center gap-1.5 px-2.5 py-1.5 bg-bg-subtle rounded-full border border-stroke-divider text-xs font-medium text-fg-default truncate max-w-[160px]"
-                              title={idx.index_name || idx.index_asset_id || 'unknown'}
+                              title={kbName}
                             >
                               <Search20Regular className="h-3 w-3 flex-shrink-0 text-accent" />
-                              {getIndexDisplayName(idx.index_name)}
+                              {kbName}
                             </span>
                           ))}
                         </div>
@@ -292,7 +407,7 @@ function AgentsPageContent() {
                       className="flex-1 h-8 text-xs"
                       onClick={(e) => {
                         e.stopPropagation()
-                        router.push(`/agent-builder?assistantId=${encodeURIComponent(agent.id)}`)
+                        router.push(`/agent-builder?assistantId=${encodeURIComponent(agent.name)}&mode=playground`)
                       }}
                     >
                       <Play20Regular className="h-3.5 w-3.5 mr-1.5" />
@@ -304,7 +419,7 @@ function AgentsPageContent() {
                       className="flex-1 h-8 text-xs"
                       onClick={(e) => {
                         e.stopPropagation()
-                        router.push(`/agent-builder?assistantId=${encodeURIComponent(agent.id)}&mode=edit`)
+                        router.push(`/agent-builder?assistantId=${encodeURIComponent(agent.name)}&mode=edit`)
                       }}
                     >
                       <Settings20Regular className="h-3.5 w-3.5 mr-1.5" />

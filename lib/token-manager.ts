@@ -4,7 +4,9 @@ class TokenManager {
   private static instance: TokenManager
   private credential: ClientSecretCredential | DefaultAzureCredential | ManagedIdentityCredential | null = null
   private cachedToken: { token: string; expiresOn: Date } | null = null
+  private cachedArmToken: { token: string; expiresOn: Date } | null = null
   private readonly scope = 'https://ai.azure.com/.default'
+  private readonly armScope = 'https://management.azure.com/.default'
 
   private constructor() {
     this.initializeCredential()
@@ -125,10 +127,64 @@ class TokenManager {
 
     return expiresOn <= fiveMinutesFromNow
   }
+
+  /**
+   * Get an ARM management plane token (scope: https://management.azure.com/.default).
+   * Used for Azure Resource Manager operations like creating project connections.
+   */
+  public async getArmToken(): Promise<string> {
+    // Check if we have a cached ARM token that's still valid
+    if (this.cachedArmToken) {
+      const now = new Date()
+      const expiresOn = new Date(this.cachedArmToken.expiresOn)
+      const fiveMinutesFromNow = new Date(now.getTime() + 5 * 60 * 1000)
+
+      if (expiresOn > fiveMinutesFromNow) {
+        return this.cachedArmToken.token
+      }
+    }
+
+    try {
+      if (!this.credential) {
+        throw new Error('Azure credential not initialized')
+      }
+
+      console.log('Fetching ARM management token...')
+      const tokenResponse = await this.credential.getToken(this.armScope)
+
+      if (!tokenResponse) {
+        throw new Error('Failed to get ARM token from Azure AD')
+      }
+
+      this.cachedArmToken = {
+        token: tokenResponse.token,
+        expiresOn: tokenResponse.expiresOnTimestamp
+          ? new Date(tokenResponse.expiresOnTimestamp)
+          : new Date(Date.now() + 60 * 60 * 1000),
+      }
+
+      return this.cachedArmToken.token
+    } catch (error: any) {
+      console.error('Failed to get ARM token:', error)
+
+      if (this.cachedArmToken) {
+        console.warn('Using expired cached ARM token as fallback')
+        return this.cachedArmToken.token
+      }
+
+      throw new Error(`Failed to get ARM token: ${error.message}`)
+    }
+  }
 }
 
-// Export singleton instance
-export const tokenManager = TokenManager.getInstance()
+// Lazy singleton — only instantiated on first actual use (not at import/build time)
+let _tokenManager: TokenManager | null = null
+function getTokenManager(): TokenManager {
+  if (!_tokenManager) {
+    _tokenManager = TokenManager.getInstance()
+  }
+  return _tokenManager
+}
 
 // Export a helper function for API routes
 export async function getFoundryBearerToken(): Promise<string> {
@@ -139,5 +195,13 @@ export async function getFoundryBearerToken(): Promise<string> {
   }
 
   // Otherwise use the token manager for auto-refresh
-  return tokenManager.getToken()
+  return getTokenManager().getToken()
+}
+
+/**
+ * Get an ARM management plane bearer token for Azure Resource Manager operations.
+ * Used for creating/managing project connections (RemoteTool connections for MCP).
+ */
+export async function getArmBearerToken(): Promise<string> {
+  return getTokenManager().getArmToken()
 }

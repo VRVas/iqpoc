@@ -65,18 +65,30 @@ export async function PATCH(
       )
     }
 
+    console.log(`[PATCH assistant] Sending to Foundry (POST):`, JSON.stringify(body, null, 2))
+
+    // Foundry Agent Service uses POST (not PATCH) to modify assistants
     const response = await fetch(agentsUrl(`/assistants/${id}`), {
-      method: 'PATCH',
+      method: 'POST',
       headers,
       body: JSON.stringify(body),
     })
 
-    const data = await response.json()
+    // Foundry may return empty body on some responses
+    const text = await response.text()
+    let data: any = {}
+    if (text && text.trim().length > 0) {
+      try {
+        data = JSON.parse(text)
+      } catch {
+        console.warn('[PATCH assistant] Non-JSON response body:', text.slice(0, 200))
+      }
+    }
 
     if (!response.ok) {
-      console.error('Foundry update-agent error:', data)
+      console.error('Foundry update-agent error:', response.status, data)
       return NextResponse.json(
-        { error: data.error?.message || 'Failed to update agent', details: data },
+        { error: data.error?.message || `Failed to update agent (${response.status})`, details: data },
         { status: response.status }
       )
     }

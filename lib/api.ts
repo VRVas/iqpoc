@@ -275,6 +275,10 @@ export async function createKnowledgeSource(sourceData: any): Promise<any> {
   return response.json()
 }
 
+/**
+ * Create a Foundry agent (classic Assistants API — DEPRECATED).
+ * Retained for backward compatibility with existing classic assistants.
+ */
 export async function createFoundryAgent(agentData: any): Promise<any> {
   const response = await fetch('/api/foundry/assistants', {
     method: 'POST',
@@ -287,6 +291,149 @@ export async function createFoundryAgent(agentData: any): Promise<any> {
   if (!response.ok) {
     const errorData = await response.json()
     throw new Error(errorData.error || 'Failed to create Foundry agent')
+  }
+
+  return response.json()
+}
+
+// ── Foundry Agents v2 API ───────────────────────────────────────────────────
+// New API: agents (by name), conversations, synchronous responses with MCP tools
+
+/**
+ * Create a Foundry agent (v2 API with MCP tool support).
+ * Payload: { name, model, instructions, knowledgeBases: string[], tools?: any[] }
+ */
+export async function createFoundryAgentV2(agentData: {
+  name: string
+  model: string
+  instructions: string
+  knowledgeBases?: string[]
+  tools?: any[]
+}): Promise<any> {
+  const response = await fetch('/api/foundry/agents', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(agentData),
+  })
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}))
+    throw new Error(errorData.error || 'Failed to create Foundry agent (v2)')
+  }
+
+  return response.json()
+}
+
+/**
+ * List Foundry agents (v2 API).
+ */
+export async function listFoundryAgentsV2(): Promise<any> {
+  const response = await fetch('/api/foundry/agents', {
+    cache: 'no-store',
+    headers: { 'Cache-Control': 'no-cache, no-store, must-revalidate' },
+  })
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}))
+    throw new Error(errorData.error || 'Failed to list agents (v2)')
+  }
+
+  return response.json()
+}
+
+/**
+ * Get a specific Foundry agent by name (v2 API).
+ */
+export async function getFoundryAgentV2(name: string): Promise<any> {
+  const response = await fetch(`/api/foundry/agents/${encodeURIComponent(name)}`, {
+    cache: 'no-store',
+    headers: { 'Cache-Control': 'no-cache, no-store, must-revalidate' },
+  })
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}))
+    throw new Error(errorData.error || 'Failed to get agent (v2)')
+  }
+
+  return response.json()
+}
+
+/**
+ * Update a Foundry agent — creates a new version (v2 API).
+ */
+export async function updateFoundryAgentV2(name: string, agentData: {
+  model?: string
+  instructions?: string
+  knowledgeBases?: string[]
+  tools?: any[]
+}): Promise<any> {
+  const response = await fetch(`/api/foundry/agents/${encodeURIComponent(name)}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(agentData),
+  })
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}))
+    throw new Error(errorData.error || 'Failed to update agent (v2)')
+  }
+
+  return response.json()
+}
+
+/**
+ * Delete a Foundry agent (v2 API).
+ */
+export async function deleteFoundryAgentV2(name: string): Promise<any> {
+  const response = await fetch(`/api/foundry/agents/${encodeURIComponent(name)}`, {
+    method: 'DELETE',
+  })
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}))
+    throw new Error(errorData.error || 'Failed to delete agent (v2)')
+  }
+
+  return response.json()
+}
+
+/**
+ * Create a conversation (v2 API — replaces threads).
+ */
+export async function createConversation(): Promise<any> {
+  const response = await fetch('/api/foundry/conversations', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({}),
+  })
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}))
+    throw new Error(errorData.error || 'Failed to create conversation')
+  }
+
+  return response.json()
+}
+
+/**
+ * Send a message and get a synchronous response from an agent (v2 API).
+ * Replaces the classic thread→message→run→poll→messages flow.
+ * Returns the complete response including MCP tool calls and output.
+ */
+export async function sendAgentResponse(data: {
+  conversationId: string
+  agentName: string
+  input: string
+}): Promise<any> {
+  const response = await fetch('/api/foundry/responses', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  })
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}))
+    throw new Error(errorData.error || 'Failed to get agent response')
   }
 
   return response.json()
