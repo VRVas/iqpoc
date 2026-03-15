@@ -17,6 +17,7 @@ import { DocumentViewerModal } from '@/components/document-viewer-modal'
 import { SourceKindIcon } from '@/components/source-kind-icon'
 import { aggregateKinds, SourceKind } from '@/lib/sourceKinds'
 import { InlineCitationsText, SourcesCountButton } from '@/components/inline-citations'
+import { MarkdownMessage } from '@/components/markdown-message'
 import { SourcesDrawer } from '@/components/sources-panel'
 import { Tooltip } from '@/components/ui/tooltip'
 import { fetchKnowledgeBases, retrieveFromKnowledgeBase } from '../lib/api'
@@ -894,16 +895,17 @@ function MessageBubble({ message, onOpenDocument, agent }: { message: Message, o
           <div className="prose prose-sm max-w-none space-y-3">
             {message.content.map((content, index) => {
               if (content.type === 'text') {
-                return (
-                  <p key={index} className="whitespace-pre-wrap">
-                    <InlineCitationsText
-                      text={content.text}
-                      references={message.references as any}
-                      activity={message.activity as any}
-                      messageId={message.id}
-                      onActivate={() => setDrawerOpen(true)}
-                    />
-                  </p>
+                return isUser ? (
+                  <p key={index} className="whitespace-pre-wrap break-words text-sm">{content.text}</p>
+                ) : (
+                  <MarkdownMessage
+                    key={index}
+                    content={content.text}
+                    references={message.references as any}
+                    activity={message.activity as any}
+                    messageId={message.id}
+                    onActivateCitation={() => setDrawerOpen(true)}
+                  />
                 )
               } else if (content.type === 'image') {
                 return (

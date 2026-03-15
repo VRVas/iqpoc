@@ -180,7 +180,7 @@ export function buildKbFunctionTool(kbNames: string[]): Record<string, unknown> 
  * @param query   The search query text
  * @returns       Raw retrieval response from Azure AI Search
  */
-export async function retrieveFromKb(kbName: string, query: string): Promise<any> {
+export async function retrieveFromKb(kbName: string, query: string, knowledgeSourceParams?: any[]): Promise<any> {
   const searchEndpoint = (process.env.AZURE_SEARCH_ENDPOINT || '').replace(/\/+$/, '')
   const apiKey = process.env.AZURE_SEARCH_API_KEY
   const apiVersion = process.env.AZURE_SEARCH_API_VERSION || '2025-11-01-preview'
@@ -191,10 +191,15 @@ export async function retrieveFromKb(kbName: string, query: string): Promise<any
 
   const url = `${searchEndpoint}/knowledgebases/${kbName}/retrieve?api-version=${apiVersion}`
 
-  const payload = {
+  const payload: any = {
     messages: [
       { role: 'user', content: [{ type: 'text', text: query }] }
     ],
+  }
+
+  // Include knowledge source runtime parameters if provided
+  if (knowledgeSourceParams && knowledgeSourceParams.length > 0) {
+    payload.knowledgeSourceParams = knowledgeSourceParams
   }
 
   console.log(`[retrieveFromKb] Querying KB "${kbName}": "${query.slice(0, 100)}"`)

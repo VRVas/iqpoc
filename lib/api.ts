@@ -424,6 +424,7 @@ export async function sendAgentResponse(data: {
   conversationId: string
   agentName: string
   input: string
+  knowledgeSourceParams?: any[]
 }): Promise<any> {
   const response = await fetch('/api/foundry/responses', {
     method: 'POST',

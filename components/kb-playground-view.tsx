@@ -9,6 +9,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Card, CardContent } from '@/components/ui/card'
 import { VoiceInput } from '@/components/ui/voice-input'
 import { InlineCitationsText, SourcesCountButton } from '@/components/inline-citations'
+import { MarkdownMessage } from '@/components/markdown-message'
 import { SourcesPanel } from '@/components/sources-panel'
 import { SourceKindIcon } from '@/components/source-kind-icon'
 import { MCPToolCallDisplay } from '@/components/mcp-tool-call-display'
@@ -1059,19 +1060,26 @@ function MessageBubble({ message, agent, showCostEstimates, onOpenSources }: {
             ? 'bg-accent text-fg-on-accent ml-12'
             : 'bg-bg-card border border-stroke-divider'
         )}>
-          <div className="prose prose-sm max-w-none space-y-3 overflow-x-auto">
-            {message.content.map((content, index) => (
-              <p key={index} className="whitespace-pre-wrap break-words">
-                <InlineCitationsText
-                  text={content.text}
+          {isUser ? (
+            <div className="prose prose-sm max-w-none space-y-3 overflow-x-auto">
+              {message.content.map((content, index) => (
+                <p key={index} className="whitespace-pre-wrap break-words text-sm">{content.text}</p>
+              ))}
+            </div>
+          ) : (
+            <div>
+              {message.content.map((content, index) => (
+                <MarkdownMessage
+                  key={index}
+                  content={content.text}
                   references={message.references as any}
                   activity={message.activity as any}
                   messageId={message.id}
-                  onActivate={() => onOpenSources?.(regularRefs, message.activity || [], isUser ? undefined : message.content[0]?.text)}
+                  onActivateCitation={() => onOpenSources?.(regularRefs, message.activity || [], message.content[0]?.text)}
                 />
-              </p>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
 
           {/* Perplexity-style Sources Button - Opens Drawer */}
           {!isUser && regularRefs.length > 0 && (

@@ -129,13 +129,16 @@ interface RuntimeSettingsPanelProps {
   settings: RuntimeSettings
   onSettingsChange: (settings: RuntimeSettings) => void
   hasWebSource: boolean
+  /** When true, only show Knowledge Source Parameters (hide output config + global headers) */
+  compact?: boolean
 }
 
 export function RuntimeSettingsPanel({
   knowledgeSources,
   settings,
   onSettingsChange,
-  hasWebSource
+  hasWebSource,
+  compact = false
 }: RuntimeSettingsPanelProps) {
   const [expandedSources, setExpandedSources] = React.useState<Set<string>>(new Set())
   const [showTokens, setShowTokens] = React.useState<Record<string, boolean>>({})
@@ -176,7 +179,7 @@ export function RuntimeSettingsPanel({
         return {
           knowledgeSourceName: ks.name,
           kind: kind,
-          alwaysQuerySource: ks.alwaysQuerySource ?? false,
+          alwaysQuerySource: ks.alwaysQuerySource ?? (kind === 'azureBlob' ? true : false),
           includeReferences: ks.includeReferences ?? true,
           includeReferenceSourceData: ks.includeReferenceSourceData ?? true,
           rerankerThreshold: ks.rerankerThreshold,
@@ -280,7 +283,8 @@ export function RuntimeSettingsPanel({
 
   return (
     <div className="space-y-6">
-      {/* Global Request Headers */}
+      {/* Global Request Headers — hidden in compact mode */}
+      {!compact && (
       <div className="space-y-3">
         <div className="flex items-center justify-between border-b border-stroke-divider pb-2">
           <div className="flex items-center gap-2">
@@ -367,8 +371,10 @@ export function RuntimeSettingsPanel({
           <p className="text-xs text-fg-muted italic">No request headers configured</p>
         )}
       </div>
+      )}
 
-      {/* Output Configuration */}
+      {/* Output Configuration — hidden in compact mode */}
+      {!compact && (
       <div className="space-y-4">
         <h4 className="text-sm font-medium border-b border-stroke-divider pb-2">Output Configuration</h4>
         
@@ -490,6 +496,7 @@ export function RuntimeSettingsPanel({
           </div>
         )}
       </div>
+      )}
 
       {/* Knowledge Source Parameters */}
       <div className="space-y-3">

@@ -70,7 +70,9 @@ export async function PATCH(
     if (body.tools) {
       for (const tool of body.tools) {
         if (tool.type === 'azure_ai_search') continue // replaced by function tool
-        if (tool.type === 'mcp') continue // replaced by function tool
+        // Only skip KB-related MCP tools (replaced by function tool);
+        // allow external MCP tools (e.g. airport-ops) through
+        if (tool.type === 'mcp' && tool.server_label?.startsWith('kb_')) continue
         tools.push(tool)
       }
     }

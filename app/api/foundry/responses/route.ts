@@ -25,7 +25,7 @@ import { agentsV2Url, foundryHeaders, retrieveFromKb } from '../helpers'
 export async function POST(request: Request) {
   try {
     const body = await request.json()
-    const { conversationId, agentName, input } = body
+    const { conversationId, agentName, input, knowledgeSourceParams } = body
 
     if (!conversationId || !agentName || !input) {
       return NextResponse.json(
@@ -100,7 +100,7 @@ export async function POST(request: Request) {
 
       if (functionCalls.length === 0) {
         // No more function calls — this is the final response
-        // Merge all collected output items with the final response's output
+        // Merge accumulated items from intermediate iterations with the final output
         const finalOutput = [...allOutputItems, ...(data.output || [])]
         data.output = finalOutput
         data._functionCallLoops = loopCount
@@ -122,6 +122,15 @@ export async function POST(request: Request) {
       // Process function calls: execute KB retrievals
       const functionOutputs: any[] = []
 
+      // Collect non-function-call items from THIS intermediate iteration
+      // (messages, code_interpreter_call, etc.) so they aren't lost
+      const otherItems = (data.output || []).filter(
+        (item: any) => !(item.type === 'function_call' && item.name === 'knowledge_base_retrieve')
+      )
+      if (otherItems.length > 0) {
+        allOutputItems.push(...otherItems)
+      }
+
       for (const fc of functionCalls) {
         // Collect the function call item for the UI
         allOutputItems.push(fc)
@@ -140,7 +149,7 @@ export async function POST(request: Request) {
 
         let retrievalResult: any
         try {
-          retrievalResult = await retrieveFromKb(kbName, query)
+          retrievalResult = await retrieveFromKb(kbName, query, knowledgeSourceParams)
         } catch (err) {
           console.error(`[responses/v2] KB retrieval failed:`, err)
           retrievalResult = {

@@ -17,7 +17,8 @@ import {
   Dismiss20Regular,
   CodeText20Regular,
   History20Regular,
-  Delete20Regular
+  Delete20Regular,
+  Airplane20Regular
 } from '@fluentui/react-icons'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
@@ -29,7 +30,10 @@ import { LoadingSkeleton } from '@/components/shared/loading-skeleton'
 import { AgentCodeModal } from '@/components/agent-code-modal'
 import { cn } from '@/lib/utils'
 import { InlineCitationsText, SourcesCountButton } from '@/components/inline-citations'
+import { MarkdownMessage } from '@/components/markdown-message'
 import { SourcesPanel } from '@/components/sources-panel'
+import { RuntimeSettingsPanel } from '@/components/runtime-settings-panel'
+import { SourceKindIcon } from '@/components/source-kind-icon'
 import { KnowledgeBaseReference, KnowledgeBaseActivityRecord } from '@/types/knowledge-retrieval'
 
 interface KnowledgeSource {
@@ -81,7 +85,8 @@ function AgentBuilderPageContent() {
   const [enabledTools, setEnabledTools] = useState({
     codeInterpreter: false,
     fileSearch: false,
-    webSearch: false
+    webSearch: false,
+    airportOps: false
   })
 
   // Track whether the agent has MCP knowledge base tools configured
@@ -97,6 +102,32 @@ function AgentBuilderPageContent() {
   // Conversation management (replaces threads)
   const [conversations, setConversations] = useState<any[]>([])
   const [showCodeModal, setShowCodeModal] = useState(false)
+
+  // Runtime settings for knowledge source parameters (per-source toggles)
+  const [runtimeSettingsOpen, setRuntimeSettingsOpen] = useState(false)
+  const [runtimeSettings, setRuntimeSettings] = useState<{
+    knowledgeSourceParams: Array<{
+      knowledgeSourceName: string
+      kind: string
+      alwaysQuerySource?: boolean
+      includeReferences?: boolean
+      includeReferenceSourceData?: boolean
+      rerankerThreshold?: number | null
+      headers?: Record<string, string>
+    }>
+    outputMode?: 'answerSynthesis' | 'extractiveData'
+    reasoningEffort?: 'minimal' | 'low' | 'medium' | 'high'
+    globalHeaders?: Record<string, string>
+    answerInstructions?: string
+    retrievalInstructions?: string
+  }>({
+    knowledgeSourceParams: [],
+    outputMode: 'answerSynthesis',
+    reasoningEffort: 'low',
+    globalHeaders: {},
+    answerInstructions: '',
+    retrievalInstructions: '',
+  })
 
   // Sources panel state (Perplexity-style side panel for citations)
   const [sourcesPanel, setSourcesPanel] = useState<{
@@ -160,23 +191,36 @@ function AgentBuilderPageContent() {
         if (latestDef.instructions) setAgentInstructions(latestDef.instructions)
         if (latestDef.model) setSelectedModel(latestDef.model)
 
-        // Reverse-map: find which KBs are configured as MCP tools
+        // Reverse-map: find which KBs are configured on this agent
         const tools = latestDef.tools || []
+        const matchedKBs = new Set<string>()
+
+        // Check MCP tools (legacy approach)
         const mcpTools = tools.filter((t: any) => t.type === 'mcp')
-        if (mcpTools.length > 0) {
-          // Extract KB names from MCP server_url patterns
-          const matchedKBs = new Set<string>()
-          for (const mcp of mcpTools) {
-            const serverUrl = mcp.server_url || ''
-            const match = serverUrl.match(/\/knowledgebases\/([^/]+)\/mcp/)
-            if (match) {
-              matchedKBs.add(match[1])
-            }
+        for (const mcp of mcpTools) {
+          const serverUrl = mcp.server_url || ''
+          const match = serverUrl.match(/\/knowledgebases\/([^/]+)\/mcp/)
+          if (match) {
+            matchedKBs.add(match[1])
           }
-          if (matchedKBs.size > 0) {
-            setSelectedKnowledgeBases(matchedKBs)
-            setHasKnowledgeTools(true)
+        }
+
+        // Check function tools (current architecture) — KB names in enum
+        const funcTools = tools.filter(
+          (t: any) => t.type === 'function' && (t.name === 'knowledge_base_retrieve' || t.function?.name === 'knowledge_base_retrieve')
+        )
+        for (const ft of funcTools) {
+          // Handle both top-level and nested function structures
+          const params = ft.parameters || ft.function?.parameters
+          const kbEnum = params?.properties?.knowledge_base?.enum
+          if (Array.isArray(kbEnum)) {
+            for (const kb of kbEnum) matchedKBs.add(kb)
           }
+        }
+
+        if (matchedKBs.size > 0) {
+          setSelectedKnowledgeBases(matchedKBs)
+          setHasKnowledgeTools(true)
         }
 
         // Restore optional tool toggles
@@ -185,6 +229,7 @@ function AgentBuilderPageContent() {
             codeInterpreter: tools.some((t: any) => t.type === 'code_interpreter'),
             fileSearch: tools.some((t: any) => t.type === 'file_search'),
             webSearch: tools.some((t: any) => t.type === 'bing_grounding'),
+            airportOps: tools.some((t: any) => t.type === 'mcp' && t.server_label === 'airport_ops'),
           })
         }
 
@@ -261,6 +306,8 @@ function AgentBuilderPageContent() {
       }
       return newSet
     })
+    // Reset runtime source params so they re-initialize with the new KB set
+    setRuntimeSettings(prev => ({ ...prev, knowledgeSourceParams: [] }))
     setSettingsDirty(true)
   }
 
@@ -276,6 +323,13 @@ function AgentBuilderPageContent() {
       const tools: any[] = []
       if (enabledTools.codeInterpreter) tools.push({ type: 'code_interpreter' })
       if (enabledTools.fileSearch) tools.push({ type: 'file_search' })
+      if (enabledTools.airportOps) tools.push({
+        type: 'mcp',
+        server_label: 'airport_ops',
+        server_url: 'https://ca-pizza-mcp-onlgvc76rbuge.jollymushroom-1f42138d.swedencentral.azurecontainerapps.io/mcp',
+        require_approval: 'never',
+        project_connection_id: 'airport-ops-mcp',
+      })
 
       // Create the agent via v2 API
       // Server handles building MCP tool definitions from knowledgeBases list
@@ -381,10 +435,24 @@ function AgentBuilderPageContent() {
       }
 
       // Send message and get response — SYNCHRONOUS, no polling needed!
+      // Include knowledge source runtime params if configured
+      const cleanedParams = runtimeSettings.knowledgeSourceParams
+        .filter(p => p.knowledgeSourceName)
+        .map(p => {
+          const cleaned: any = { knowledgeSourceName: p.knowledgeSourceName }
+          if (p.alwaysQuerySource === true) cleaned.alwaysQuerySource = true
+          cleaned.includeReferences = p.includeReferences !== false
+          cleaned.includeReferenceSourceData = p.includeReferenceSourceData !== false
+          if (typeof p.rerankerThreshold === 'number') cleaned.rerankerThreshold = p.rerankerThreshold
+          if (p.headers && Object.keys(p.headers).length > 0) cleaned.headers = p.headers
+          return cleaned
+        })
+
       const responseData = await sendAgentResponse({
         conversationId,
         agentName: agentName_saved,
         input: userMessage,
+        knowledgeSourceParams: cleanedParams.length > 0 ? cleanedParams : undefined,
       })
 
       console.log('[v2] Response received:', {
@@ -394,7 +462,7 @@ function AgentBuilderPageContent() {
       })
 
       // Extract the assistant message and references from the response output
-      const { text, references, mcpCalls, activity } = extractResponseContent(responseData)
+      const { text, references, mcpCalls, activity, codeBlocks, generatedFiles } = extractResponseContent(responseData)
 
       const msgId = `msg-${Date.now()}`
       setMessages(prev => [...prev, {
@@ -406,6 +474,8 @@ function AgentBuilderPageContent() {
         responseId: responseData.id,
         references,
         activity,
+        codeBlocks,
+        generatedFiles,
       }])
 
     } catch (err) {
@@ -427,21 +497,26 @@ function AgentBuilderPageContent() {
    * The response.output array may contain:
    * - { type: "function_call", name: "knowledge_base_retrieve", ... } — KB retrieval invocation
    * - { type: "function_call_output", output: "...", _rawRetrieval: {...} } — KB retrieval results
+   * - { type: "code_interpreter_call", id, container_id, code, outputs, status } — Code Interpreter
    * - { type: "mcp_call", ... } — MCP tool invocation (legacy, kept for backward compat)
    * - { type: "mcp_call_output", output: "..." } — MCP tool result
-   * - { type: "message", role: "assistant", content: [{ type: "output_text", text: "..." }] }
+   * - { type: "message", role: "assistant", content: [{ type: "output_text", text: "...", annotations }] }
    */
   const extractResponseContent = (responseData: any): {
     text: string
     references: KnowledgeBaseReference[]
     mcpCalls: any[]
     activity: KnowledgeBaseActivityRecord[]
+    codeBlocks: Array<{ id: string; code: string; containerId?: string; status?: string }>
+    generatedFiles: Array<{ containerId: string; fileId: string; filename: string; startIndex?: number; endIndex?: number }>
   } => {
     const output = responseData.output || []
     let text = ''
     const references: KnowledgeBaseReference[] = []
     const mcpCalls: any[] = []
     const activity: KnowledgeBaseActivityRecord[] = []
+    const codeBlocks: Array<{ id: string; code: string; containerId?: string; status?: string }> = []
+    const generatedFiles: Array<{ containerId: string; fileId: string; filename: string; startIndex?: number; endIndex?: number }> = []
 
     for (const item of output) {
       if (item.type === 'message' && item.role === 'assistant') {
@@ -474,9 +549,37 @@ function AgentBuilderPageContent() {
                 docKey: ann.file_citation.file_id || '',
                 sourceData: { title: ann.file_citation.quote || 'Document', content: ann.file_citation.quote || '' }
               } as any)
+            } else if (ann.type === 'container_file_citation') {
+              // Code Interpreter generated file reference
+              const containerId = ann.container_id || ''
+              const fileId = ann.file_id || ''
+              const filename = ann.filename || fileId
+              if (containerId && fileId) {
+                generatedFiles.push({
+                  containerId,
+                  fileId,
+                  filename,
+                  startIndex: ann.start_index,
+                  endIndex: ann.end_index,
+                })
+              }
             }
           }
         }
+      } else if (item.type === 'code_interpreter_call') {
+        // Code Interpreter tool call — extract the Python code that was executed
+        codeBlocks.push({
+          id: item.id || `ci-${Date.now()}`,
+          code: item.code || '',
+          containerId: item.container_id,
+          status: item.status,
+        })
+        mcpCalls.push({
+          type: 'code_interpreter',
+          name: 'Code Interpreter',
+          server_label: 'Python sandbox',
+          arguments: { code: item.code },
+        })
       } else if (item.type === 'function_call' && item.name === 'knowledge_base_retrieve') {
         // Function-tool KB retrieval call (current approach)
         let args: any = {}
@@ -507,16 +610,22 @@ function AgentBuilderPageContent() {
         if (rawRetrieval?.activity) {
           activity.push(...rawRetrieval.activity)
         }
+      } else if (item.type === 'mcp_list_tools') {
+        // MCP tool discovery step — Foundry runtime enumerating available tools
+        // No action needed, this is informational
+      } else if (item.type === 'mcp_approval_request') {
+        // MCP approval request — shouldn't happen when require_approval is 'never'
+        // No action needed
       } else if (item.type === 'mcp_call') {
-        // Legacy MCP tool call (kept for backward compat)
+        // MCP tool call (remote MCP servers like airport-ops, or legacy KB MCP)
         mcpCalls.push({
           type: 'mcp',
-          name: item.name || 'knowledge_base_retrieve',
+          name: item.name || 'mcp_tool',
           server_label: item.server_label || '',
           arguments: item.arguments,
         })
       } else if (item.type === 'mcp_call_output') {
-        // Legacy MCP tool results
+        // MCP tool results (remote MCP servers or legacy KB MCP)
         try {
           const mcpOutput = typeof item.output === 'string' ? JSON.parse(item.output) : item.output
           if (mcpOutput?.references) {
@@ -533,7 +642,7 @@ function AgentBuilderPageContent() {
             }
           }
         } catch {
-          // MCP output may not be JSON — that's fine
+          // MCP output may not be JSON (e.g. raw tool output from airport-ops) — that's fine
         }
       }
     }
@@ -542,7 +651,7 @@ function AgentBuilderPageContent() {
       text = 'No response content received.'
     }
 
-    return { text, references, mcpCalls, activity }
+    return { text, references, mcpCalls, activity, codeBlocks, generatedFiles }
   }
 
   const updateAgentDetails = async (): Promise<boolean> => {
@@ -553,6 +662,13 @@ function AgentBuilderPageContent() {
       const tools: any[] = []
       if (enabledTools.codeInterpreter) tools.push({ type: 'code_interpreter' })
       if (enabledTools.fileSearch) tools.push({ type: 'file_search' })
+      if (enabledTools.airportOps) tools.push({
+        type: 'mcp',
+        server_label: 'airport_ops',
+        server_url: 'https://ca-pizza-mcp-onlgvc76rbuge.jollymushroom-1f42138d.swedencentral.azurecontainerapps.io/mcp',
+        require_approval: 'never',
+        project_connection_id: 'airport-ops-mcp',
+      })
 
       const kbNames = getSelectedKBNames()
       setHasKnowledgeTools(kbNames.length > 0)
@@ -670,6 +786,27 @@ function AgentBuilderPageContent() {
                 <div className="flex-1">
                   <div className="font-medium">Web Search</div>
                   <div className="text-sm text-fg-muted mt-1">Search the web for real-time information</div>
+                </div>
+              </label>
+
+              <label className="flex items-start gap-3 p-4 border border-stroke-card rounded-lg cursor-pointer hover:bg-bg-tertiary">
+                <input
+                  type="checkbox"
+                  checked={enabledTools.airportOps}
+                  onChange={(e) => setEnabledTools({...enabledTools, airportOps: e.target.checked})}
+                  className="mt-0.5 h-4 w-4"
+                />
+                <div className="flex-1">
+                  <div className="flex items-center gap-2">
+                    <div className="font-medium">Airport Operations (MCP)</div>
+                    <Airplane20Regular className="text-fg-muted" />
+                  </div>
+                  <div className="text-sm text-fg-muted mt-1">
+                    Connect to the Airport Operations MCP server for real-time KPIs, flight data, delays, passenger stats, and more (40 tools)
+                  </div>
+                  <div className="text-xs text-fg-muted mt-1 font-mono opacity-60">
+                    Remote MCP &middot; Streamable HTTP &middot; airport-ops-mcp
+                  </div>
                 </div>
               </label>
             </div>
@@ -1060,7 +1197,27 @@ function AgentBuilderPageContent() {
                 <h2 className="text-lg font-semibold">Test your agent</h2>
                 <p className="text-sm text-fg-muted">Send messages to test the MCP knowledge integration</p>
               </div>
-              {/* View Code button hidden */}
+              {/* Runtime settings toggle — knowledge source parameters */}
+              {selectedKnowledgeBases.size > 0 && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setRuntimeSettingsOpen(!runtimeSettingsOpen)}
+                  className={cn(
+                    "gap-2 text-xs",
+                    runtimeSettingsOpen && "bg-bg-accent-subtle text-fg-accent"
+                  )}
+                  title="Knowledge Source Parameters"
+                >
+                  <Settings20Regular className="h-4 w-4" />
+                  <span className="hidden sm:inline">Source Settings</span>
+                  {runtimeSettings.knowledgeSourceParams.length > 0 && (
+                    <span className="ml-1 text-[10px] px-1.5 py-0.5 rounded-full bg-accent text-fg-on-accent">
+                      {runtimeSettings.knowledgeSourceParams.length}
+                    </span>
+                  )}
+                </Button>
+              )}
             </div>
           </div>
 
@@ -1077,6 +1234,8 @@ function AgentBuilderPageContent() {
                 const msgId = message.id || `msg-${index}`
                 const refs = (message.references || []) as KnowledgeBaseReference[]
                 const acts = (message.activity || []) as KnowledgeBaseActivityRecord[]
+                const msgCodeBlocks = (message as any).codeBlocks || []
+                const msgGeneratedFiles = (message as any).generatedFiles || []
                 const isUser = message.role === 'user'
 
                 return (
@@ -1104,17 +1263,62 @@ function AgentBuilderPageContent() {
                           ? "bg-accent text-fg-on-accent ml-12"
                           : "bg-bg-card border border-stroke-divider"
                       )}>
-                        <div className="prose prose-sm max-w-none space-y-3 overflow-x-auto">
-                          <p className="whitespace-pre-wrap break-words">
-                            <InlineCitationsText
-                              text={message.content}
-                              references={refs}
-                              activity={acts}
-                              messageId={msgId}
-                              onActivate={() => !isUser && refs.length > 0 && handleOpenSourcesPanel(msgId, refs, acts, message.content?.slice(0, 100))}
-                            />
-                          </p>
-                        </div>
+                        {/* Message Content */}
+                        {isUser ? (
+                          <p className="whitespace-pre-wrap break-words text-sm">{message.content}</p>
+                        ) : (
+                          <MarkdownMessage
+                            content={message.content || ''}
+                            references={refs}
+                            activity={acts}
+                            messageId={msgId}
+                            generatedFiles={msgGeneratedFiles}
+                            onActivateCitation={() => handleOpenSourcesPanel(msgId, refs, acts, message.content?.slice(0, 100))}
+                          />
+                        )}
+
+                        {/* Code Interpreter: collapsible code blocks */}
+                        {msgCodeBlocks.length > 0 && (
+                          <div className="mt-3 space-y-2">
+                            {msgCodeBlocks.map((cb: any, cbIdx: number) => (
+                              <details
+                                key={cb.id || cbIdx}
+                                className="group border border-stroke-divider rounded-lg overflow-hidden"
+                              >
+                                <summary className="flex items-center gap-2 px-3 py-2 bg-bg-subtle cursor-pointer text-xs text-fg-muted hover:bg-bg-hover select-none">
+                                  <CodeText20Regular className="h-4 w-4" />
+                                  <span>Python code executed</span>
+                                  {cb.status === 'completed' && (
+                                    <CheckmarkCircle20Filled className="h-4 w-4 text-green-600 ml-auto" />
+                                  )}
+                                </summary>
+                                <pre className="p-3 text-xs bg-bg-secondary overflow-x-auto max-h-[300px]">
+                                  <code className="language-python">{cb.code}</code>
+                                </pre>
+                              </details>
+                            ))}
+                          </div>
+                        )}
+
+                        {/* Generated files download links (non-image files) */}
+                        {msgGeneratedFiles.filter((f: any) => !/\.(png|jpg|jpeg|gif|svg|webp)$/i.test(f.filename)).length > 0 && (
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            {msgGeneratedFiles
+                              .filter((f: any) => !/\.(png|jpg|jpeg|gif|svg|webp)$/i.test(f.filename))
+                              .map((file: any, fIdx: number) => (
+                                <a
+                                  key={fIdx}
+                                  href={`/api/foundry/containers/${encodeURIComponent(file.containerId)}/files/${encodeURIComponent(file.fileId)}?filename=${encodeURIComponent(file.filename)}`}
+                                  download={file.filename}
+                                  className="inline-flex items-center gap-2 px-3 py-2 text-xs bg-bg-subtle hover:bg-bg-hover border border-stroke-divider rounded-lg text-fg-default transition-colors"
+                                >
+                                  <span>📥</span>
+                                  <span>{file.filename}</span>
+                                </a>
+                              ))
+                            }
+                          </div>
+                        )}
 
                         {/* Sources button */}
                         {!isUser && refs.length > 0 && (
@@ -1129,7 +1333,7 @@ function AgentBuilderPageContent() {
                         {message.toolCalls && message.toolCalls.length > 0 && (
                           <div className="mt-2 pt-2 border-t border-stroke-divider">
                             <div className="text-xs text-fg-muted">
-                              🔧 Tools used: {message.toolCalls.map((tc: any) => tc.type || 'MCP').join(', ')}
+                              🔧 Tools used: {Array.from(new Set(message.toolCalls.map((tc: any) => tc.name || tc.type || 'Tool'))).join(', ')}
                             </div>
                           </div>
                         )}
@@ -1182,6 +1386,52 @@ function AgentBuilderPageContent() {
             </p>
           </div>
         </div>
+
+        {/* Runtime Settings Panel — slide-out for knowledge source parameters */}
+        {runtimeSettingsOpen && (
+          <div className="w-80 border-l border-stroke-divider bg-bg-card flex flex-col overflow-hidden">
+            <div className="flex items-center justify-between p-4 border-b border-stroke-divider">
+              <h3 className="text-sm font-semibold">Source Settings</h3>
+              <button
+                onClick={() => setRuntimeSettingsOpen(false)}
+                className="p-1 hover:bg-bg-hover rounded text-fg-muted hover:text-fg-default transition-colors"
+              >
+                <Dismiss20Regular className="h-4 w-4" />
+              </button>
+            </div>
+            <div className="flex-1 overflow-auto p-4">
+              <RuntimeSettingsPanel
+                compact
+                knowledgeSources={(() => {
+                  // Derive unique knowledge sources from selected KBs
+                  const uniqueSources = new Map<string, { name: string; kind?: string }>()
+                  Array.from(selectedKnowledgeBases).forEach(kbName => {
+                    const kb = knowledgeBases.find(b => b.name === kbName)
+                    ;(kb?.knowledgeSources || []).forEach((ks: any) => {
+                      if (!uniqueSources.has(ks.name)) {
+                        uniqueSources.set(ks.name, {
+                          name: ks.name,
+                          kind: knowledgeSourcesMap.get(ks.name)?.kind || undefined
+                        })
+                      }
+                    })
+                  })
+                  return Array.from(uniqueSources.values())
+                })()}
+                settings={runtimeSettings}
+                onSettingsChange={setRuntimeSettings}
+                hasWebSource={(() => {
+                  return Array.from(selectedKnowledgeBases).some(kbName => {
+                    const kb = knowledgeBases.find(b => b.name === kbName)
+                    return (kb?.knowledgeSources || []).some((ks: any) =>
+                      knowledgeSourcesMap.get(ks.name)?.kind === 'web'
+                    )
+                  })
+                })()}
+              />
+            </div>
+          </div>
+        )}
 
         {/* Sources Panel - Perplexity-style side panel */}
         <SourcesPanel
