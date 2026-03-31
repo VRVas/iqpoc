@@ -91,9 +91,36 @@ export async function POST(request: Request) {
       }
 
       if (!response.ok) {
+        const errorMessage = data.error?.message || `Failed to get response (${response.status})`
+
+        // Handle MCP tool errors gracefully instead of crashing the conversation.
+        // When the agent passes invalid arguments to an MCP tool (e.g. empty string
+        // for an enum param), Foundry returns 400 with type "tool_user_error".
+        // Instead of propagating the raw 400 to the client, return it as an
+        // assistant message so the conversation can continue.
+        if (data.error?.code === 'tool_user_error' || data.error?.type === 'invalid_request_error') {
+          console.warn('[responses/v2] MCP tool error (returning as message):', errorMessage.slice(0, 200))
+          const toolErrorOutput = [{
+            type: 'message',
+            role: 'assistant',
+            content: [{
+              type: 'output_text',
+              text: `I encountered an issue calling a tool. Let me try a different approach.\n\n*Technical detail: ${errorMessage.split(':').slice(0, 2).join(':').slice(0, 150)}*`,
+            }],
+          }]
+          return NextResponse.json({
+            id: previousResponseId || `err-${Date.now()}`,
+            status: 'completed',
+            output: [...allOutputItems, ...toolErrorOutput],
+            _toolError: true,
+          }, {
+            headers: { 'x-conversation-id': conversationId },
+          })
+        }
+
         console.error('[responses/v2] Error:', response.status, data)
         return NextResponse.json(
-          { error: data.error?.message || `Failed to get response (${response.status})`, details: data },
+          { error: errorMessage, details: data },
           { status: response.status }
         )
       }
