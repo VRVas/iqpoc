@@ -28,6 +28,7 @@ import {
 } from '@fluentui/react-icons'
 import { useRouter } from 'next/navigation'
 import { formatRelativeTime } from '@/lib/utils'
+import { useViewMode } from '@/lib/view-mode'
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -104,6 +105,7 @@ function getIndexDisplayName(indexName: string | null | undefined) {
 function AgentsPageContent() {
   const router = useRouter()
   const { toast } = useToast()
+  const { isAdmin } = useViewMode()
 
   const [agents, setAgents] = useState<AgentDisplay[]>([])
   const [loading, setLoading] = useState(true)
@@ -278,12 +280,12 @@ function AgentsPageContent() {
     <div className="space-y-6">
       <PageHeader
         title="Agents"
-        description="Foundry agents powered by Azure AI Search knowledge"
-        primaryAction={{
+        description={isAdmin ? "Foundry agents powered by Azure AI Search knowledge" : "Choose an agent to start a conversation"}
+        primaryAction={isAdmin ? {
           label: 'Create Agent',
           onClick: () => router.push('/agent-builder'),
           icon: Add20Regular,
-        }}
+        } : undefined}
       />
 
       {agents.length === 0 ? (
@@ -324,14 +326,15 @@ function AgentsPageContent() {
                             {agent.model}
                           </span>
                           <StatusPill variant="success">active</StatusPill>
-                          {agent.apiVersion === 'v2' ? (
+                          {isAdmin && (agent.apiVersion === 'v2' ? (
                             <span className="rounded-full px-2 py-0.5 text-xs font-medium bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400">v2</span>
                           ) : (
                             <span className="rounded-full px-2 py-0.5 text-xs font-medium bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400">classic</span>
-                          )}
+                          ))}
                         </div>
                       </div>
 
+                      {isAdmin && (
                       <Button
                         variant="ghost"
                         size="icon"
@@ -343,6 +346,7 @@ function AgentsPageContent() {
                       >
                         <Delete20Regular className="h-3.5 w-3.5" />
                       </Button>
+                      )}
                     </div>
 
                     {agent.instructions && (
@@ -413,6 +417,7 @@ function AgentsPageContent() {
                       <Play20Regular className="h-3.5 w-3.5 mr-1.5" />
                       Chat
                     </Button>
+                    {isAdmin && (
                     <Button
                       variant="outline"
                       size="sm"
@@ -425,6 +430,7 @@ function AgentsPageContent() {
                       <Settings20Regular className="h-3.5 w-3.5 mr-1.5" />
                       Configure
                     </Button>
+                    )}
                   </CardFooter>
                 </Card>
               </div>

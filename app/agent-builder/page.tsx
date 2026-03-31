@@ -35,6 +35,7 @@ import { SourcesPanel } from '@/components/sources-panel'
 import { RuntimeSettingsPanel } from '@/components/runtime-settings-panel'
 import { SourceKindIcon } from '@/components/source-kind-icon'
 import { KnowledgeBaseReference, KnowledgeBaseActivityRecord } from '@/types/knowledge-retrieval'
+import { useViewMode } from '@/lib/view-mode'
 
 interface KnowledgeSource {
   name: string
@@ -66,6 +67,7 @@ const SECTIONS = [
 function AgentBuilderPageContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
+  const { isAgent, isAdmin } = useViewMode()
   const returnUrl = searchParams.get('returnUrl')
   const existingAssistantId = searchParams.get('assistantId')
   const mode = searchParams.get('mode')
@@ -102,6 +104,11 @@ function AgentBuilderPageContent() {
   // Conversation management (replaces threads)
   const [conversations, setConversations] = useState<any[]>([])
   const [showCodeModal, setShowCodeModal] = useState(false)
+  const [showInstructionsModal, setShowInstructionsModal] = useState(false)
+
+  // Starter questions
+  const [starterQuestions, setStarterQuestions] = useState<string[]>([])
+  const [generatingStarters, setGeneratingStarters] = useState(false)
 
   // Runtime settings for knowledge source parameters (per-source toggles)
   const [runtimeSettingsOpen, setRuntimeSettingsOpen] = useState(false)
@@ -234,6 +241,14 @@ function AgentBuilderPageContent() {
         }
 
         setAgentNameSaved(agent.name)
+
+        // Load stored starter questions
+        try {
+          const stored = JSON.parse(localStorage.getItem('agentStarterQuestions') || '{}')
+          if (stored[agent.name] && Array.isArray(stored[agent.name])) {
+            setStarterQuestions(stored[agent.name])
+          }
+        } catch {}
       } else {
         // Fallback: try loading as classic assistant
         console.warn('Agent not found in v2 API, trying classic...')
@@ -316,6 +331,33 @@ function AgentBuilderPageContent() {
     router.push(`/knowledge-sources/quick-create?returnUrl=${encodeURIComponent(currentUrl)}`)
   }
 
+  const handleGenerateStarters = async () => {
+    if (!agentInstructions.trim()) return
+    setGeneratingStarters(true)
+    try {
+      const response = await fetch('/api/foundry/generate-starters', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          systemMessage: agentInstructions,
+          model: selectedModel,
+        }),
+      })
+      if (response.ok) {
+        const data = await response.json()
+        if (data.starters && data.starters.length > 0) {
+          setStarterQuestions(data.starters)
+        }
+      } else {
+        console.error('Failed to generate starters:', await response.text())
+      }
+    } catch (err) {
+      console.error('Error generating starters:', err)
+    } finally {
+      setGeneratingStarters(false)
+    }
+  }
+
   const handleSaveAgent = async () => {
     setSaving(true)
     try {
@@ -344,6 +386,15 @@ function AgentBuilderPageContent() {
       console.log('Creating agent (v2) with data:', agentData)
       const agent = await createFoundryAgentV2(agentData)
       console.log('Created agent (v2):', agent)
+
+      // Store starter questions in localStorage for this agent
+      if (starterQuestions.length > 0) {
+        try {
+          const stored = JSON.parse(localStorage.getItem('agentStarterQuestions') || '{}')
+          stored[agent.name] = starterQuestions
+          localStorage.setItem('agentStarterQuestions', JSON.stringify(stored))
+        } catch {}
+      }
 
       setAgentNameSaved(agent.name)
       setHasKnowledgeTools(getSelectedKBNames().length > 0)
@@ -686,6 +737,14 @@ function AgentBuilderPageContent() {
 
       if (response.ok) {
         console.log('Agent details updated successfully (v2)')
+        // Persist starter questions
+        if (starterQuestions.length > 0) {
+          try {
+            const stored = JSON.parse(localStorage.getItem('agentStarterQuestions') || '{}')
+            stored[agentName_saved] = starterQuestions
+            localStorage.setItem('agentStarterQuestions', JSON.stringify(stored))
+          } catch {}
+        }
         return true
       } else {
         const errData = await response.json().catch(() => ({}))
@@ -816,7 +875,18 @@ function AgentBuilderPageContent() {
       case 'instructions':
         return (
           <div className="space-y-6">
-            <h2 className="text-lg font-semibold mb-4">Instructions</h2>
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-semibold">Instructions</h2>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setShowInstructionsModal(true)}
+                className="gap-1.5"
+              >
+                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" /></svg>
+                Expand
+              </Button>
+            </div>
             <Card className="p-6 max-w-4xl">
               <Textarea
                 value={agentInstructions}
@@ -829,11 +899,69 @@ function AgentBuilderPageContent() {
                   {agentInstructions.length} characters
                 </span>
                 <div className="flex gap-2">
-                  <Button size="sm" variant="secondary">Load template</Button>
-                  <Button size="sm" variant="secondary">Clear</Button>
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    onClick={handleGenerateStarters}
+                    disabled={generatingStarters || !agentInstructions.trim()}
+                    className="gap-1.5"
+                  >
+                    {generatingStarters ? (
+                      <>
+                        <div className="animate-spin h-3 w-3 border-2 border-fg-muted border-t-transparent rounded-full" />
+                        Generating...
+                      </>
+                    ) : (
+                      '✨ Generate starter questions'
+                    )}
+                  </Button>
+                  <Button size="sm" variant="secondary" onClick={() => setAgentInstructions('')}>Clear</Button>
                 </div>
               </div>
             </Card>
+
+            {/* Starter Questions Editor */}
+            {starterQuestions.length > 0 && (
+              <Card className="p-6 max-w-4xl">
+                <h3 className="text-sm font-semibold mb-3">Conversation Starters</h3>
+                <p className="text-xs text-fg-muted mb-4">These questions will appear when a new conversation starts. Click to edit.</p>
+                <div className="space-y-2">
+                  {starterQuestions.map((q, i) => (
+                    <div key={i} className="flex items-center gap-2">
+                      <span className="text-xs text-fg-muted w-4 text-center flex-shrink-0">{i + 1}</span>
+                      <input
+                        type="text"
+                        value={q}
+                        onChange={(e) => {
+                          const updated = [...starterQuestions]
+                          updated[i] = e.target.value
+                          setStarterQuestions(updated)
+                        }}
+                        className="flex-1 text-sm px-3 py-2 border border-stroke-card rounded-lg bg-bg-primary focus:outline-none focus:ring-2 focus:ring-stroke-focus"
+                      />
+                      <button
+                        onClick={() => setStarterQuestions(starterQuestions.filter((_, idx) => idx !== i))}
+                        className="p-1 text-fg-muted hover:text-destructive hover:bg-destructive/10 rounded transition-colors"
+                        title="Remove question"
+                      >
+                        <Dismiss20Regular className="h-4 w-4" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+                <div className="mt-3 flex gap-2">
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={handleGenerateStarters}
+                    disabled={generatingStarters}
+                    className="text-xs"
+                  >
+                    ↻ Regenerate
+                  </Button>
+                </div>
+              </Card>
+            )}
           </div>
         )
 
@@ -980,7 +1108,8 @@ function AgentBuilderPageContent() {
   if (agentName_saved) {
     return (
       <div className="flex h-[calc(100vh-3.5rem)] bg-bg-primary">
-        {/* Left Panel - Agent Info & Conversations */}
+        {/* Left Panel - Agent Info & Conversations (Admin only) */}
+        {isAdmin && (
         <div className="w-80 bg-bg-secondary border-r border-stroke-divider flex flex-col">
           <div className="p-4 border-b border-stroke-divider">
             <input
@@ -1130,12 +1259,66 @@ function AgentBuilderPageContent() {
             </div>
 
             <div>
+              <h3 className="text-sm font-semibold mb-2">Tools</h3>
+              <div className="space-y-1.5">
+                <label className="flex items-center gap-2 text-xs p-2 bg-bg-tertiary rounded cursor-pointer hover:bg-bg-hover">
+                  <input
+                    type="checkbox"
+                    checked={enabledTools.codeInterpreter}
+                    onChange={(e) => { setEnabledTools({...enabledTools, codeInterpreter: e.target.checked}); setSettingsDirty(true) }}
+                    className="h-3.5 w-3.5"
+                  />
+                  <span className="font-medium">Code Interpreter</span>
+                </label>
+                <label className="flex items-center gap-2 text-xs p-2 bg-bg-tertiary rounded cursor-pointer hover:bg-bg-hover">
+                  <input
+                    type="checkbox"
+                    checked={enabledTools.fileSearch}
+                    onChange={(e) => { setEnabledTools({...enabledTools, fileSearch: e.target.checked}); setSettingsDirty(true) }}
+                    className="h-3.5 w-3.5"
+                  />
+                  <span className="font-medium">File Search</span>
+                </label>
+                <label className="flex items-center gap-2 text-xs p-2 bg-bg-tertiary rounded cursor-pointer hover:bg-bg-hover">
+                  <input
+                    type="checkbox"
+                    checked={enabledTools.webSearch}
+                    onChange={(e) => { setEnabledTools({...enabledTools, webSearch: e.target.checked}); setSettingsDirty(true) }}
+                    className="h-3.5 w-3.5"
+                  />
+                  <span className="font-medium">Web Search</span>
+                </label>
+                <label className="flex items-center gap-2 text-xs p-2 bg-bg-tertiary rounded cursor-pointer hover:bg-bg-hover">
+                  <input
+                    type="checkbox"
+                    checked={enabledTools.airportOps}
+                    onChange={(e) => { setEnabledTools({...enabledTools, airportOps: e.target.checked}); setSettingsDirty(true) }}
+                    className="h-3.5 w-3.5"
+                  />
+                  <div className="flex items-center gap-1.5">
+                    <span className="font-medium">Airport Ops (MCP)</span>
+                    <Airplane20Regular className="h-3 w-3 text-fg-muted" />
+                  </div>
+                </label>
+              </div>
+            </div>
+
+            <div>
               <h3 className="text-sm font-semibold mb-2">Model</h3>
               <p className="text-xs text-fg-muted">{selectedModel}</p>
             </div>
 
             <div>
-              <h3 className="text-sm font-semibold mb-2">System Instructions</h3>
+              <div className="flex items-center justify-between mb-2">
+                <h3 className="text-sm font-semibold">System Instructions</h3>
+                <button
+                  onClick={() => setShowInstructionsModal(true)}
+                  className="p-1 hover:bg-bg-hover rounded text-fg-muted hover:text-fg-default transition-colors"
+                  title="Expand editor"
+                >
+                  <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" /></svg>
+                </button>
+              </div>
               <div className="space-y-2">
                 <textarea
                   value={agentInstructions}
@@ -1188,14 +1371,48 @@ function AgentBuilderPageContent() {
             </Button>
           </div>
         </div>
+        )}
 
         {/* Chat Interface */}
         <div className="flex-1 flex flex-col">
           <div className="border-b border-stroke-divider p-4">
             <div className="flex items-center justify-between">
-              <div>
-                <h2 className="text-lg font-semibold">Test your agent</h2>
-                <p className="text-sm text-fg-muted">Send messages to test the MCP knowledge integration</p>
+              <div className="flex items-center gap-4">
+                {/* Agent title */}
+                <div>
+                  <h2 className="text-lg font-semibold">{isAgent ? agentName : 'Test your agent'}</h2>
+                  {isAdmin && <p className="text-sm text-fg-muted">Send messages to test the MCP knowledge integration</p>}
+                </div>
+                {/* Conversation dropdown (always shown, compact in agent mode) */}
+                {isAgent && (
+                  <div className="flex items-center gap-2">
+                    <div className="relative">
+                      <select
+                        className="text-xs pl-3 pr-7 py-1.5 border border-stroke-card rounded-lg bg-bg-secondary text-fg-primary appearance-none cursor-pointer hover:border-stroke-accent focus:outline-none focus:ring-1 focus:ring-stroke-focus"
+                        value={conversationId || ''}
+                        onChange={(e) => {
+                          if (e.target.value === '__new__') {
+                            handleCreateNewConversation()
+                          } else if (e.target.value) {
+                            switchToConversation(e.target.value)
+                          }
+                        }}
+                      >
+                        {conversations.map((conv) => (
+                          <option key={conv.id} value={conv.id}>
+                            Conv {conv.id.slice(-8)} &middot; {new Date(conv.created_at).toLocaleTimeString()}
+                          </option>
+                        ))}
+                        <option value="__new__">+ New conversation</option>
+                      </select>
+                      <div className="absolute inset-y-0 right-0 flex items-center pr-2 pointer-events-none">
+                        <svg className="h-3 w-3 text-fg-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                        </svg>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
               {/* Runtime settings toggle — knowledge source parameters */}
               {selectedKnowledgeBases.size > 0 && (
@@ -1226,8 +1443,32 @@ function AgentBuilderPageContent() {
             {messages.length === 0 ? (
               <div className="text-center py-8">
                 <Bot20Regular className="h-12 w-12 mx-auto text-fg-muted mb-3" />
-                <p className="text-sm text-fg-muted">Start a conversation to test your agent</p>
+                <p className="text-sm text-fg-muted">
+                  {isAgent ? `How can I help you today?` : 'Start a conversation to test your agent'}
+                </p>
                 <p className="text-xs text-fg-muted mt-1">Try asking about topics covered in your knowledge bases</p>
+
+                {/* Starter Questions */}
+                {starterQuestions.length > 0 && (
+                  <div className="mt-6 grid grid-cols-1 sm:grid-cols-2 gap-2 max-w-2xl mx-auto">
+                    {starterQuestions.map((q, i) => (
+                      <button
+                        key={i}
+                        onClick={() => {
+                          setCurrentMessage(q)
+                          // Optionally auto-send
+                          setTimeout(() => {
+                            const el = document.querySelector('[data-send-btn]') as HTMLButtonElement
+                            if (el) el.click()
+                          }, 100)
+                        }}
+                        className="text-left text-sm px-4 py-3 border border-stroke-card rounded-lg hover:bg-bg-hover hover:border-accent/50 transition-all text-fg-default"
+                      >
+                        {q}
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
             ) : (
               messages.map((message, index) => {
@@ -1375,6 +1616,7 @@ function AgentBuilderPageContent() {
                 disabled={isRunning}
               />
               <Button
+                data-send-btn
                 onClick={sendMessage}
                 disabled={!currentMessage.trim() || isRunning}
               >
@@ -1553,6 +1795,51 @@ function AgentBuilderPageContent() {
         assistantId={agentName_saved}
         threadId={conversationId}
       />
+
+      {/* Instructions Expand Modal */}
+      {showInstructionsModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-6"
+          role="dialog"
+          aria-modal="true"
+          onClick={(e) => { if (e.target === e.currentTarget) setShowInstructionsModal(false) }}
+        >
+          <div className="relative w-full max-w-4xl max-h-[85vh] flex flex-col bg-bg-card border border-stroke-divider rounded-lg shadow-xl overflow-hidden">
+            <div className="flex items-center justify-between px-5 py-3 border-b border-stroke-divider bg-bg-subtle">
+              <div>
+                <h3 className="text-sm font-semibold">System Instructions</h3>
+                <span className="text-xs text-fg-muted">{agentInstructions.length} characters</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  onClick={handleGenerateStarters}
+                  disabled={generatingStarters || !agentInstructions.trim()}
+                >
+                  {generatingStarters ? 'Generating...' : '✨ Generate starters'}
+                </Button>
+                <Button size="sm" variant="secondary" onClick={() => setAgentInstructions('')}>Clear</Button>
+                <button
+                  onClick={() => setShowInstructionsModal(false)}
+                  className="p-1.5 hover:bg-bg-hover rounded text-fg-muted hover:text-fg-default transition-colors"
+                >
+                  <Dismiss20Regular className="h-4 w-4" />
+                </button>
+              </div>
+            </div>
+            <div className="flex-1 p-5 overflow-auto">
+              <textarea
+                value={agentInstructions}
+                onChange={(e) => { setAgentInstructions(e.target.value); setSettingsDirty(true) }}
+                placeholder="Describe what this agent should do..."
+                className="w-full h-full min-h-[60vh] font-mono text-sm p-4 bg-bg-primary border border-stroke-card rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-stroke-focus"
+                autoFocus
+              />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

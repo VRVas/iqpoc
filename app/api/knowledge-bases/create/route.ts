@@ -15,15 +15,19 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json()
 
-    // Inject Azure OpenAI credentials server-side
+    // Inject Azure OpenAI endpoint server-side and use Managed Identity auth.
+    // The Search service's system-assigned MI has 'Cognitive Services OpenAI User'
+    // on the AI Services resource, so we omit apiKey and authIdentity to let
+    // Azure Search use its MI automatically. This is MCAPS-compliant and survives
+    // disableLocalAuth=true on the AI Services resource.
     const openAIEndpoint = process.env.NEXT_PUBLIC_AZURE_OPENAI_ENDPOINT
-    const openAIKey = process.env.AZURE_OPENAI_API_KEY || process.env.FOUNDRY_API_KEY
 
     if (body.models && Array.isArray(body.models)) {
       body.models.forEach((model: any) => {
         if (model.kind === 'azureOpenAI' && model.azureOpenAIParameters) {
           if (openAIEndpoint) model.azureOpenAIParameters.resourceUri = openAIEndpoint
-          if (openAIKey) model.azureOpenAIParameters.apiKey = openAIKey
+          // Use MI auth: remove apiKey so Search uses its system-assigned identity
+          delete model.azureOpenAIParameters.apiKey
           delete model.azureOpenAIParameters.authIdentity
         }
       })

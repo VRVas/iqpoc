@@ -15,9 +15,11 @@ import { SourceKindIcon } from '@/components/source-kind-icon'
 import { MCPToolCallDisplay } from '@/components/mcp-tool-call-display'
 import { RuntimeSettingsPanel } from '@/components/runtime-settings-panel'
 import { fetchKnowledgeBases, fetchKnowledgeSources, retrieveFromKnowledgeBase } from '../lib/api'
+import { getQatarDateTime } from '../lib/utils'
 import { KBViewCodeModal } from '@/components/kb-view-code-modal'
 import { useConversationStarters } from '@/lib/conversationStarters'
 import { cn, formatRelativeTime, cleanTextSnippet } from '@/lib/utils'
+import { useViewMode } from '@/lib/view-mode'
 import { TraceExplorer } from '@/components/trace-explorer'
 import {
   Select,
@@ -113,6 +115,7 @@ interface KBPlaygroundViewProps {
 }
 
 export function KBPlaygroundView({ preselectedAgent }: KBPlaygroundViewProps) {
+  const { isAdmin } = useViewMode()
   const [agents, setAgents] = useState<KnowledgeAgent[]>([])
   const [selectedAgent, setSelectedAgent] = useState<KnowledgeAgent | null>(null)
   const [agentsLoading, setAgentsLoading] = useState<boolean>(true)
@@ -404,7 +407,13 @@ export function KBPlaygroundView({ preselectedAgent }: KBPlaygroundViewProps) {
     setIsLoading(true)
 
     try {
+      // Inject UTC+3 (Doha/Qatar) date/time as a system message
+      const qatarDateTime = getQatarDateTime()
       const azureMessages = [
+        {
+          role: 'system' as const,
+          content: [{ type: 'text', text: `Current date and time (UTC+3, Doha/Qatar): ${qatarDateTime}` }]
+        },
         ...messages.map((m) => ({
           role: m.role as 'user' | 'assistant' | 'system',
           content: m.content.map(c => ({ type: 'text', text: c.text }))
@@ -593,7 +602,13 @@ export function KBPlaygroundView({ preselectedAgent }: KBPlaygroundViewProps) {
     setIsLoading(true)
 
     try {
+      // Inject UTC+3 (Doha/Qatar) date/time as a system message
+      const qatarDateTimeSubmit = getQatarDateTime()
       const azureMessages = [
+        {
+          role: 'system' as const,
+          content: [{ type: 'text', text: `Current date and time (UTC+3, Doha/Qatar): ${qatarDateTimeSubmit}` }]
+        },
         ...messages.map((m) => ({
           role: m.role as 'user' | 'assistant' | 'system',
           content: m.content.map(c => ({ type: 'text', text: c.text }))
@@ -759,6 +774,7 @@ export function KBPlaygroundView({ preselectedAgent }: KBPlaygroundViewProps) {
               </div>
             </div>
             <div className="flex items-center gap-2">
+              {isAdmin && (
               <Button
                 variant="ghost"
                 size="icon"
@@ -768,6 +784,7 @@ export function KBPlaygroundView({ preselectedAgent }: KBPlaygroundViewProps) {
               >
                 <Code20Regular className="h-5 w-5" />
               </Button>
+              )}
               <Button
                 variant="ghost"
                 size="icon"

@@ -14,6 +14,24 @@ export function formatDate(date: Date | string): string {
   }).format(d)
 }
 
+/**
+ * Get current date and time formatted for UTC+3 (Doha/Qatar timezone).
+ * Used to inject temporal context into system messages for every conversation.
+ */
+export function getQatarDateTime(): string {
+  return new Intl.DateTimeFormat('en-US', {
+    timeZone: 'Asia/Qatar',
+    weekday: 'long',
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: true,
+  }).format(new Date())
+}
+
 export function formatRelativeTime(date: Date | string): string {
   const d = typeof date === 'string' ? new Date(date) : date
   const now = new Date()

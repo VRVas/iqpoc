@@ -65,24 +65,34 @@ export async function PUT(req: NextRequest) {
     const body = await req.json()
     const sourceName = body.name
 
-    // Inject storage connection string server-side if the client sent a placeholder or empty value
-    const storageConnStr = process.env.AZURE_STORAGE_CONNECTION_STRING
-    if (storageConnStr && body.azureBlobParameters) {
+    // Inject storage connection using MI-based ResourceId format.
+    // The Search service's system-assigned MI has 'Storage Blob Data Reader'
+    // on the storage account, so we use ResourceId= format instead of key-based
+    // connection strings. This is MCAPS-compliant (allowSharedKeyAccess=false).
+    const storageAccountName = process.env.AZURE_STORAGE_ACCOUNT_NAME || 'aikbstorageq36gpyt3maa7w'
+    const subscriptionId = process.env.AZURE_SUBSCRIPTION_ID || 'e7f1696a-37dd-4876-accb-2facb8713917'
+    const resourceGroup = process.env.AZURE_RESOURCE_GROUP || 'iqpoc'
+    const resourceIdConn = `ResourceId=/subscriptions/${subscriptionId}/resourceGroups/${resourceGroup}/providers/Microsoft.Storage/storageAccounts/${storageAccountName};`
+
+    if (body.azureBlobParameters) {
       const clientConn = body.azureBlobParameters.connectionString || ''
-      // Replace if empty, placeholder, or ResourceId format (needs managed identity)
-      if (!clientConn || clientConn.startsWith('ResourceId=') || clientConn === '__SERVER_INJECT__') {
-        body.azureBlobParameters.connectionString = storageConnStr
+      // Replace if empty, placeholder, or any key-based connection string
+      if (!clientConn || clientConn === '__SERVER_INJECT__' || !clientConn.startsWith('ResourceId=')) {
+        body.azureBlobParameters.connectionString = resourceIdConn
       }
     }
 
-    // Inject OpenAI credentials server-side for embedding and chat models
+    // Inject Azure OpenAI endpoint server-side and use Managed Identity auth.
+    // The Search service's system-assigned MI has 'Cognitive Services OpenAI User'
+    // on the AI Services resource, so we omit apiKey and authIdentity.
+    // This is MCAPS-compliant and survives disableLocalAuth=true.
     const openAIEndpoint = process.env.NEXT_PUBLIC_AZURE_OPENAI_ENDPOINT
-    const openAIKey = process.env.AZURE_OPENAI_API_KEY || process.env.FOUNDRY_API_KEY
 
     const injectCredentials = (model: any) => {
       if (model?.kind === 'azureOpenAI' && model.azureOpenAIParameters) {
         if (openAIEndpoint) model.azureOpenAIParameters.resourceUri = openAIEndpoint
-        if (openAIKey) model.azureOpenAIParameters.apiKey = openAIKey
+        // Use MI auth: remove apiKey so Search uses its system-assigned identity
+        delete model.azureOpenAIParameters.apiKey
         delete model.azureOpenAIParameters.authIdentity
       }
     }
