@@ -87,7 +87,7 @@ export function LandingPage() {
         <Button
           size="lg"
           className="h-14 px-10 text-lg bg-accent hover:bg-accent-hover text-fg-on-accent"
-          onClick={() => router.push('/test')}
+          onClick={() => router.push('/agents')}
         >
           Get Started
           <ChevronRight20Regular className="ml-2 h-5 w-5" />

@@ -40,3 +40,8 @@ Thumbs.db
 
 # Uploaded data files
 data_to_inject/
+az-check.txt
+az-check2.txt
+build-output.txt
+dns-*.txt
+vnet-list.json

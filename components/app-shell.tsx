@@ -12,6 +12,7 @@ import {
   Play20Regular,
   Navigation20Regular,
   Dismiss20Regular,
+  DocumentBulletList20Regular,
 } from '@fluentui/react-icons'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
@@ -29,6 +30,7 @@ const navigation: NavItem[] = [
   { href: '/agents', label: 'Agents', icon: Bot20Regular },
   { href: '/test', label: 'Playground', icon: Play20Regular },
   { href: '/knowledge', label: 'Knowledge', icon: Database20Regular },
+  { href: '/knowledge-sources', label: 'Knowledge Sources', icon: DocumentBulletList20Regular },
 ]
 
 interface AppShellProps {
@@ -39,7 +41,36 @@ export function AppShell({ children }: AppShellProps) {
   const [sidebarOpen, setSidebarOpen] = React.useState(false)
   const [collapsed, setCollapsed] = React.useState(false)
   const pathname = usePathname()
-  const { isAgent } = useViewMode()
+  const router = useRouter()
+  const { isAgent, isAdmin, requestAdminAccess, showPasswordPrompt, submitPassword, cancelPasswordPrompt } = useViewMode()
+  const [passwordInput, setPasswordInput] = React.useState('')
+  const [passwordError, setPasswordError] = React.useState(false)
+
+  // Pages that require admin access (all except /, /agents, and /agent-builder)
+  // /agent-builder has its own agent-mode UI so it must remain accessible
+  const adminOnlyPaths = ['/knowledge', '/knowledge-sources', '/test', '/playground', '/knowledge-bases']
+  const isAdminOnlyPage = adminOnlyPaths.some(p => pathname.startsWith(p))
+
+  // Guard admin-only pages: redirect ?edit=admin and prompt for password
+  React.useEffect(() => {
+    if (!isAdminOnlyPage) return
+    // Ensure ?edit=admin is in the URL
+    if (typeof window !== 'undefined') {
+      const url = new URL(window.location.href)
+      if (url.searchParams.get('edit') !== 'admin') {
+        url.searchParams.set('edit', 'admin')
+        window.history.replaceState({}, '', url.toString())
+      }
+    }
+    // If not admin, prompt for password
+    if (!isAdmin) {
+      requestAdminAccess().then((granted) => {
+        if (!granted) {
+          router.push('/agents')
+        }
+      })
+    }
+  }, [pathname, isAdmin])
 
   // Load persisted collapse state
   React.useEffect(() => {
@@ -126,6 +157,54 @@ export function AppShell({ children }: AppShellProps) {
           </div>
         </main>
       </div>
+
+      {/* Password prompt modal */}
+      {showPasswordPrompt && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm">
+          <div className="bg-bg-card border border-stroke-divider rounded-2xl shadow-2xl p-8 w-full max-w-sm mx-4">
+            <h2 className="text-lg font-semibold text-fg-default mb-2">Admin Access Required</h2>
+            <p className="text-sm text-fg-muted mb-6">Enter the admin password to access this page.</p>
+            <form onSubmit={(e) => {
+              e.preventDefault()
+              const ok = submitPassword(passwordInput)
+              if (!ok) {
+                setPasswordError(true)
+                setTimeout(() => setPasswordError(false), 2000)
+              } else {
+                setPasswordInput('')
+              }
+            }}>
+              <input
+                type="password"
+                value={passwordInput}
+                onChange={(e) => { setPasswordInput(e.target.value); setPasswordError(false) }}
+                placeholder="Password"
+                autoFocus
+                className={cn(
+                  'w-full px-4 py-3 rounded-xl border bg-bg-canvas text-fg-default text-sm focus:outline-none focus:ring-2 focus:ring-accent mb-4',
+                  passwordError ? 'border-red-500 ring-2 ring-red-500/30' : 'border-stroke-divider'
+                )}
+              />
+              {passwordError && <p className="text-xs text-red-500 mb-3 -mt-2">Incorrect password</p>}
+              <div className="flex gap-3">
+                <button
+                  type="button"
+                  onClick={() => { cancelPasswordPrompt(); setPasswordInput('') }}
+                  className="flex-1 px-4 py-2.5 rounded-xl border border-stroke-divider text-sm font-medium text-fg-muted hover:bg-glass-hover transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="flex-1 px-4 py-2.5 rounded-xl bg-accent text-fg-on-accent text-sm font-medium hover:bg-accent-hover transition-colors"
+                >
+                  Unlock
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -136,15 +215,29 @@ interface HeaderProps {
 }
 
 function Header({ onMenuClick, showSidebar }: HeaderProps) {
-  const { viewMode, setViewMode, isAdmin } = useViewMode()
+  const { viewMode, setViewMode, isAdmin, requestAdminAccess, showPasswordPrompt, submitPassword, cancelPasswordPrompt } = useViewMode()
   const router = useRouter()
+  const [passwordInput, setPasswordInput] = React.useState('')
+  const [passwordError, setPasswordError] = React.useState(false)
 
   const handleModeToggle = (checked: boolean) => {
-    const newMode = checked ? 'admin' : 'agent'
-    setViewMode(newMode)
-    // When switching to agent mode, redirect to /test?agent=test
-    if (newMode === 'agent') {
-      router.push('/test?agent=test')
+    if (checked) {
+      // Switching to admin — prompt for password
+      requestAdminAccess().then((granted) => {
+        if (!granted) {
+          // Password cancelled — stay in agent mode
+        }
+      })
+    } else {
+      const newMode = 'agent'
+      setViewMode(newMode)
+      // Only redirect to /agents if currently on an admin-only page
+      // If on /agent-builder (mid-conversation), stay on the same page
+      const adminOnlyRoutes = ['/knowledge', '/knowledge-sources', '/test', '/playground', '/knowledge-bases']
+      const currentPath = window.location.pathname
+      if (adminOnlyRoutes.some(p => currentPath.startsWith(p))) {
+        router.push('/agents')
+      }
     }
   }
 
@@ -212,7 +305,7 @@ function Sidebar({ navigation, currentPath, isOpen, onClose, collapsed, onToggle
       >
   <div className="flex flex-1 flex-col overflow-hidden border-r border-glass-border bg-glass-surface backdrop-blur-elevated shadow-lg">
           <div className="flex flex-1 flex-col overflow-y-auto px-3 py-6">
-            <div className={cn('mb-6 flex justify-end', collapsed && 'justify-center')}>
+            <div className="mb-6 flex justify-center">
               <Button
                 variant="ghost"
                 size="icon"
@@ -236,7 +329,7 @@ function Sidebar({ navigation, currentPath, isOpen, onClose, collapsed, onToggle
                 <SidebarLink
                   key={item.href}
                   item={item}
-                  isActive={currentPath === item.href}
+                  isActive={currentPath === item.href || currentPath.startsWith(item.href + '/')}
                   collapsed={collapsed}
                 />
               ))}
@@ -300,25 +393,27 @@ interface SidebarLinkProps {
 
 function SidebarLink({ item, isActive, onClick, collapsed }: SidebarLinkProps) {
   const Icon = item.icon
+  // Admin sidebar links always include ?edit=admin
+  const href = `${item.href}?edit=admin`
 
   const linkEl = (
     <Link
-      href={item.href}
+      href={href}
       onClick={onClick}
       className={cn(
-        'group relative flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-medium transition-all duration-fast ease-out',
+        'group relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all duration-fast ease-out',
         isActive
           ? 'bg-accent-subtle text-accent shadow-sm'
           : 'text-fg-muted hover:bg-glass-hover hover:text-fg-default',
-        collapsed && 'justify-center px-2'
+        collapsed && 'justify-center px-0'
       )}
     >
       {isActive && (
-  <div className="absolute left-2 top-1/2 h-6 w-1 -translate-y-1/2 rounded-full bg-accent" />
+  <div className="absolute left-1.5 top-1/2 h-6 w-1 -translate-y-1/2 rounded-full bg-accent" />
       )}
-      <Icon className={cn('h-5 w-5 flex-shrink-0', collapsed ? 'mx-auto' : 'text-fg-muted group-hover:text-fg-default')} />
+      <Icon className={cn('h-5 w-5 flex-shrink-0', isActive ? '' : 'text-fg-muted group-hover:text-fg-default')} />
       {!collapsed && <span className="truncate tracking-tight">{item.label}</span>}
     </Link>
   )
-  return collapsed ? <Tooltip content={item.label}>{linkEl}</Tooltip> : linkEl
+  return collapsed ? <Tooltip content={item.label} side="right">{linkEl}</Tooltip> : linkEl
 }

@@ -105,6 +105,7 @@ function AgentBuilderPageContent() {
   const [conversations, setConversations] = useState<any[]>([])
   const [showCodeModal, setShowCodeModal] = useState(false)
   const [showInstructionsModal, setShowInstructionsModal] = useState(false)
+  const [showAgentInfo, setShowAgentInfo] = useState(false)
 
   // Starter questions
   const [starterQuestions, setStarterQuestions] = useState<string[]>([])
@@ -1410,6 +1411,80 @@ function AgentBuilderPageContent() {
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                         </svg>
                       </div>
+                    </div>
+                    {/* Agent Info button */}
+                    <div className="relative">
+                      <button
+                        onClick={() => setShowAgentInfo(!showAgentInfo)}
+                        className={cn(
+                          "h-7 w-7 rounded-full flex items-center justify-center text-xs font-bold border transition-colors",
+                          showAgentInfo
+                            ? "bg-accent text-fg-on-accent border-accent"
+                            : "bg-bg-secondary text-fg-muted border-stroke-card hover:border-accent hover:text-accent"
+                        )}
+                        title="Agent Details"
+                      >
+                        i
+                      </button>
+                      {/* Agent info popover */}
+                      {showAgentInfo && (
+                        <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 z-50 w-80 max-h-[70vh] overflow-y-auto rounded-xl border border-stroke-divider bg-bg-card shadow-2xl p-4 space-y-3">
+                          <div className="flex items-center justify-between mb-1">
+                            <h3 className="text-sm font-semibold text-fg-default">Agent Details</h3>
+                            <button onClick={() => setShowAgentInfo(false)} className="text-fg-muted hover:text-fg-default">
+                              <Dismiss20Regular className="h-4 w-4" />
+                            </button>
+                          </div>
+
+                          {/* Model */}
+                          <div>
+                            <span className="text-[10px] uppercase tracking-wider text-fg-subtle font-medium">Model</span>
+                            <p className="text-sm text-fg-default font-mono bg-bg-secondary rounded-lg px-2.5 py-1.5 mt-1">{selectedModel}</p>
+                          </div>
+
+                          {/* Tools */}
+                          <div>
+                            <span className="text-[10px] uppercase tracking-wider text-fg-subtle font-medium">Tools</span>
+                            <div className="flex flex-wrap gap-1.5 mt-1">
+                              {enabledTools.codeInterpreter && <span className="text-[11px] px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300">Code Interpreter</span>}
+                              {enabledTools.fileSearch && <span className="text-[11px] px-2 py-0.5 rounded-full bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300">File Search</span>}
+                              {enabledTools.webSearch && <span className="text-[11px] px-2 py-0.5 rounded-full bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300">Web Search</span>}
+                              {enabledTools.airportOps && <span className="text-[11px] px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300">Airport Ops MCP</span>}
+                              {hasKnowledgeTools && <span className="text-[11px] px-2 py-0.5 rounded-full bg-accent/10 text-accent">KB Retrieval</span>}
+                              {!enabledTools.codeInterpreter && !enabledTools.fileSearch && !enabledTools.webSearch && !enabledTools.airportOps && !hasKnowledgeTools && (
+                                <span className="text-[11px] text-fg-subtle italic">None</span>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Knowledge Bases */}
+                          <div>
+                            <span className="text-[10px] uppercase tracking-wider text-fg-subtle font-medium">Knowledge Bases</span>
+                            {selectedKnowledgeBases.size > 0 ? (
+                              <div className="flex flex-wrap gap-1.5 mt-1">
+                                {Array.from(selectedKnowledgeBases).map(kb => (
+                                  <span key={kb} className="text-[11px] px-2 py-0.5 rounded-full bg-bg-secondary text-fg-default border border-stroke-card">{kb}</span>
+                                ))}
+                              </div>
+                            ) : (
+                              <p className="text-[11px] text-fg-subtle italic mt-1">None connected</p>
+                            )}
+                          </div>
+
+                          {/* System Message */}
+                          <div>
+                            <span className="text-[10px] uppercase tracking-wider text-fg-subtle font-medium">System Message</span>
+                            <details className="mt-1">
+                              <summary className="text-[11px] text-accent cursor-pointer hover:underline">
+                                {agentInstructions.length > 80 ? 'Click to expand' : 'View'}
+                              </summary>
+                              <pre className="mt-1.5 text-[11px] text-fg-muted bg-bg-secondary rounded-lg p-2.5 whitespace-pre-wrap break-words max-h-48 overflow-y-auto font-mono leading-relaxed">
+                                {agentInstructions || '(No system message)'}
+                              </pre>
+                            </details>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
                 )}

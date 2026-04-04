@@ -5,6 +5,7 @@ import { AppShell } from '@/components/app-shell'
 import { ThemeProvider } from '@/components/theme-provider'
 import { ToastProvider } from '@/components/ui/toast'
 import { ViewModeProvider } from '@/lib/view-mode'
+import NextTopLoader from 'nextjs-toploader'
 
 const spaceGrotesk = Space_Grotesk({
   subsets: ['latin'],
@@ -32,6 +33,7 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body className={`${spaceGrotesk.variable} ${jetBrainsMono.variable}`}>
+        <NextTopLoader color="#5C0632" height={3} showSpinner={false} />
         <ThemeProvider
           attribute="class"
           defaultTheme="light"
