@@ -176,7 +176,10 @@ function EvaluatorCatalog() {
     )
   }
 
-  if (!evaluators) return null
+  if (!evaluators || !evaluators.built_in) return null
+
+  const builtIn = evaluators.built_in || []
+  const custom = evaluators.custom || []
 
   const categories = [
     { key: 'quality', label: 'Quality', color: 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300' },
@@ -189,12 +192,12 @@ function EvaluatorCatalog() {
 
   return (
     <div className="rounded-2xl border border-stroke-divider bg-bg-card p-6">
-      <h3 className="text-sm font-semibold text-fg-default mb-4">Available Evaluators ({evaluators.built_in.length + evaluators.custom.length})</h3>
+      <h3 className="text-sm font-semibold text-fg-default mb-4">Available Evaluators ({builtIn.length + custom.length})</h3>
       <div className="space-y-4">
         {categories.map(cat => {
           const items = cat.key === 'domain'
-            ? evaluators.custom
-            : evaluators.built_in.filter((e: any) => e.category === cat.key)
+            ? custom
+            : builtIn.filter((e: any) => e.category === cat.key)
           if (!items || items.length === 0) return null
           return (
             <div key={cat.key}>
