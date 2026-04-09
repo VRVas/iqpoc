@@ -45,3 +45,22 @@ az-check2.txt
 build-output.txt
 dns-*.txt
 vnet-list.json
+
+# Azure CLI deployment output
+appi-*.txt
+cae-*.txt
+cosmos-*.txt
+ext-install.txt
+mi-create.txt
+rbac*.txt
+
+# Eval service test output
+eval-service/test-results*.txt
+eval-service/test-final.txt
+eval-service/targeted-test.txt
+
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+eval-service/.env

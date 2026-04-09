@@ -13,6 +13,7 @@ import {
   Navigation20Regular,
   Dismiss20Regular,
   DocumentBulletList20Regular,
+  DataBarVertical20Regular,
 } from '@fluentui/react-icons'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
@@ -31,6 +32,7 @@ const navigation: NavItem[] = [
   { href: '/test', label: 'Playground', icon: Play20Regular },
   { href: '/knowledge', label: 'Knowledge', icon: Database20Regular },
   { href: '/knowledge-sources', label: 'Knowledge Sources', icon: DocumentBulletList20Regular },
+  { href: '/evaluations', label: 'Evaluations', icon: DataBarVertical20Regular },
 ]
 
 interface AppShellProps {
@@ -48,7 +50,7 @@ export function AppShell({ children }: AppShellProps) {
 
   // Pages that require admin access (all except /, /agents, and /agent-builder)
   // /agent-builder has its own agent-mode UI so it must remain accessible
-  const adminOnlyPaths = ['/knowledge', '/knowledge-sources', '/test', '/playground', '/knowledge-bases']
+  const adminOnlyPaths = ['/knowledge', '/knowledge-sources', '/test', '/playground', '/knowledge-bases', '/evaluations']
   const isAdminOnlyPage = adminOnlyPaths.some(p => pathname.startsWith(p))
 
   // Guard admin-only pages: redirect ?edit=admin and prompt for password

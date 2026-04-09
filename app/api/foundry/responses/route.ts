@@ -147,6 +147,41 @@ export async function POST(request: Request) {
           loops: loopCount,
         })
 
+        // Fire-and-forget: log response metadata for evaluation platform
+        try {
+          const responseText = finalOutput
+            .filter((o: any) => o.type === 'message' && o.role === 'assistant')
+            .map((o: any) => o.content?.map((c: any) => c.text).join('') || '')
+            .join('\n')
+          const toolCalls = finalOutput
+            .filter((o: any) => o.type === 'function_call' || o.type === 'mcp_call')
+            .map((o: any) => ({ name: o.name, type: o.type, arguments: o.arguments }))
+
+          const evalServiceUrl = process.env.EVAL_SERVICE_URL
+          if (evalServiceUrl) {
+            // Log to eval service response-log (non-blocking)
+            // Ref: https://learn.microsoft.com/en-us/azure/foundry/how-to/develop/cloud-evaluation?tabs=python#collect-response-ids
+            fetch(`${evalServiceUrl}/response-log/log`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                response_id: data.id,
+                conversation_id: conversationId,
+                agent_name: agentName,
+                user_query: input,
+                response_text: responseText.slice(0, 5000),
+                tool_calls: toolCalls,
+                timestamp: new Date().toISOString(),
+                has_kb_retrieval: toolCalls.some((t: any) => t.name === 'knowledge_base_retrieve'),
+                has_mcp_call: toolCalls.some((t: any) => t.type === 'mcp_call'),
+                loop_count: loopCount,
+              }),
+            }).catch(err => console.warn('[responses/v2] Response log failed (non-critical):', err.message))
+          }
+        } catch (logErr) {
+          console.warn('[responses/v2] Response logging error (non-critical):', logErr)
+        }
+
         return NextResponse.json(data, {
           headers: {
             'x-conversation-id': conversationId,
