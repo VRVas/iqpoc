@@ -51,6 +51,8 @@ export default function RunEvaluationPage() {
   const [evalType, setEvalType] = useState<EvalType>('agent-target')
   const [selectedAgent, setSelectedAgent] = useState('')
   const [selectedEvaluators, setSelectedEvaluators] = useState<Set<string>>(new Set(['coherence', 'violence', 'task_adherence']))
+  const [agentToolTypes, setAgentToolTypes] = useState<Set<string>>(new Set())
+  const [agentToolsLoading, setAgentToolsLoading] = useState(false)
   const [queries, setQueries] = useState("refund policy economy ticket\nbaggage allowance business class\npet transport cage sizes dogs\ncan i change my flight to tomorrow\nwhat happens if i miss my connecting flight\nupgrade from economy to business how much\ncheck in online not working\nqmice portal terminated can it be reactivated\nlost luggage compensation process\ndo you fly doha to boston direct\nis QR320 delayed today\nwheelchair assistance how to request\nunaccompanied minor policy age limit\nfrequent flyer miles expire?\nbaggage + pet in cabin same flight possible?\nrefund for cancelled flight AND rebooking options\nlounge access with economy ticket privilege club gold\ninfant bassinet availability long haul\nvisa transit doha do i need one\nboarding gate info doha to london today")
   const [syntheticPrompt, setSyntheticPrompt] = useState("You are simulating a Qatar Airways contact center. Generate realistic customer queries as a contact center operator would type them — short, informal, sometimes grammatically imperfect, using abbreviations. Mix difficulty levels:\n\nEASY (single-topic lookups): baggage limits, check-in times, meal options, seat selection, flight status\nMEDIUM (policy interpretation): refund eligibility, rebooking rules, upgrade costs, loyalty tier benefits, pet transport requirements, unaccompanied minors\nHARD (multi-topic combos): 'refund + rebooking options for cancelled flight', 'pet in cabin AND extra baggage same booking', 'transit visa doha + lounge access with economy ticket', 'upgrade cost business + extra legroom availability'\n\nInclude queries about: baggage, refunds, flight changes, loyalty/Privilege Club, check-in, pet transport, special assistance, MCP airport operations (delays, gates, runway usage), QMICE portal, visa/transit, infant/child policies. Write them as an operator would — not full sentences.")
   const [syntheticCount, setSyntheticCount] = useState(10)
@@ -91,6 +93,64 @@ export default function RunEvaluationPage() {
         .finally(() => setResponseLogsLoading(false))
     }
   }, [evalType])
+
+  // Fetch agent tool types when agent is selected (for auto-filtering evaluators)
+  // Per MS Learn: tool_call_accuracy, tool_input_accuracy, tool_output_utilization,
+  // tool_call_success, and groundedness have LIMITED support with Azure AI Search,
+  // Code Interpreter, Bing, SharePoint, and Fabric tools.
+  // They work well with Function Tool and MCP (knowledge-based MCP excluded).
+  // Ref: https://learn.microsoft.com/en-us/azure/foundry/concepts/evaluation-evaluators/agent-evaluators#supported-tools
+  useEffect(() => {
+    if (!selectedAgent) {
+      setAgentToolTypes(new Set())
+      return
+    }
+    setAgentToolsLoading(true)
+    fetch(`/api/foundry/agents/${encodeURIComponent(selectedAgent)}`)
+      .then(r => r.json())
+      .then(data => {
+        const tools = data?.definition?.tools || data?.versions?.latest?.definition?.tools || []
+        const types = new Set<string>()
+        for (const tool of tools) {
+          const t = tool.type || ''
+          types.add(t)
+        }
+        setAgentToolTypes(types)
+      })
+      .catch(() => setAgentToolTypes(new Set()))
+      .finally(() => setAgentToolsLoading(false))
+  }, [selectedAgent])
+
+  // Determine which evaluators should be disabled based on agent's tool types
+  // Per MS Learn "Supported tools" section:
+  // LIMITED support tools: azure_ai_search, code_interpreter, bing_grounding, sharepoint_grounding, fabric
+  // FULL support: function (user-defined), mcp (except knowledge-based MCP)
+  const LIMITED_SUPPORT_TOOL_TYPES = new Set(['azure_ai_search', 'code_interpreter', 'bing_grounding', 'bing_custom_search', 'sharepoint_grounding', 'fabric'])
+  const TOOL_DEF_EVALUATORS = new Set(['tool_call_accuracy', 'tool_selection', 'tool_input_accuracy', 'tool_output_utilization'])
+  const LIMITED_SUPPORT_EVALUATORS = new Set([...TOOL_DEF_EVALUATORS, 'tool_call_success', 'groundedness'])
+
+  const hasOnlyLimitedSupportTools = (() => {
+    if (agentToolTypes.size === 0) return false
+    // Check if ALL tools are in the limited-support category
+    // "function" type tools have full support, so if any function tool exists, not limited-only
+    const hasFunctionTool = agentToolTypes.has('function')
+    if (hasFunctionTool) return false
+    // MCP tools that are NOT knowledge-based have full support
+    // Our function tool "knowledge_base_retrieve" is type "function" so it's fine
+    // If only azure_ai_search, code_interpreter, mcp (knowledge-based) → limited
+    return true
+  })()
+
+  const isEvaluatorDisabledByTools = (shortName: string): string | null => {
+    if (!hasOnlyLimitedSupportTools) return null
+    if (!LIMITED_SUPPORT_EVALUATORS.has(shortName)) return null
+    if (evalType !== 'agent-target' && evalType !== 'synthetic') return null
+    const toolList = Array.from(agentToolTypes).join(', ')
+    if (TOOL_DEF_EVALUATORS.has(shortName)) {
+      return `Disabled — requires tool_definitions and has limited support with ${toolList} tools`
+    }
+    return `Disabled — limited support with ${toolList} tools`
+  }
 
   const toggleEvaluator = (name: string) => {
     setSelectedEvaluators(prev => {
@@ -262,6 +322,25 @@ export default function RunEvaluationPage() {
               <option key={a.name} value={a.name}>{a.name}</option>
             ))}
           </select>
+          {/* Agent Tool Detection Banner */}
+          {agentToolsLoading && (
+            <p className="text-xs text-fg-muted mt-2 animate-pulse">Detecting agent tools...</p>
+          )}
+          {!agentToolsLoading && selectedAgent && agentToolTypes.size > 0 && (
+            <div className={cn(
+              'mt-3 rounded-xl border p-3 text-xs',
+              hasOnlyLimitedSupportTools
+                ? 'border-orange-200 bg-orange-50 dark:bg-orange-900/20 dark:border-orange-800 text-orange-700 dark:text-orange-300'
+                : 'border-green-200 bg-green-50 dark:bg-green-900/20 dark:border-green-800 text-green-700 dark:text-green-300'
+            )}>
+              <strong>Agent tools detected:</strong> {Array.from(agentToolTypes).join(', ')}
+              {hasOnlyLimitedSupportTools ? (
+                <span>. Some evaluators have been auto-disabled because this agent only uses tools with <a href="https://learn.microsoft.com/en-us/azure/foundry/concepts/evaluation-evaluators/agent-evaluators#supported-tools" target="_blank" className="underline">limited evaluator support</a> (Azure AI Search, Code Interpreter, MCP).</span>
+              ) : (
+                <span>. This agent has Function Tool definitions — all evaluators are available.</span>
+              )}
+            </div>
+          )}
         </div>
       )}
 
@@ -380,7 +459,17 @@ export default function RunEvaluationPage() {
                     {categoryItems.map((e: any) => {
                       const isRedTeamOnly = e.red_team_only === true
                       const isIncompatible = !isRedTeamOnly && e.modes && !e.modes.includes(currentMode)
-                      const isDisabled = isRedTeamOnly || isIncompatible
+                      const toolDisableReason = isEvaluatorDisabledByTools(e.short_name)
+                      const isDisabled = isRedTeamOnly || isIncompatible || !!toolDisableReason
+                      // Auto-deselect evaluators that become disabled by tool detection
+                      if (toolDisableReason && selectedEvaluators.has(e.short_name)) {
+                        // Schedule deselection to avoid state update during render
+                        setTimeout(() => setSelectedEvaluators(prev => {
+                          const next = new Set(prev)
+                          next.delete(e.short_name)
+                          return next
+                        }), 0)
+                      }
                       return (
                       <button
                         key={e.short_name}
@@ -424,8 +513,8 @@ export default function RunEvaluationPage() {
                           {isIncompatible && !isRedTeamOnly && (
                             <span className="text-[9px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-600 dark:bg-amber-900/30 dark:text-amber-300 mt-0.5 inline-block">Not for {evalType}</span>
                           )}
-                          {!isDisabled && e.requires_tool_definitions && (evalType === 'agent-target' || evalType === 'synthetic') && (
-                            <span className="text-[9px] px-1.5 py-0.5 rounded bg-orange-100 text-orange-600 dark:bg-orange-900/30 dark:text-orange-300 mt-0.5 inline-block">May error — needs tool_definitions</span>
+                          {toolDisableReason && (
+                            <span className="text-[9px] px-1.5 py-0.5 rounded bg-orange-100 text-orange-600 dark:bg-orange-900/30 dark:text-orange-300 mt-0.5 inline-block">{toolDisableReason}</span>
                           )}
                         </div>
                       </button>

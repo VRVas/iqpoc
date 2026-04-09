@@ -603,10 +603,10 @@ def poll_eval_run(eval_id: str, run_id: str, timeout_seconds: int = 60) -> dict:
                 for r in run.per_testing_criteria_results
             ]
 
-        # Get individual output items (first 50)
+        # Get individual output items (all — frontend handles pagination)
         try:
             output_items = list(client.evals.runs.output_items.list(run_id=run_id, eval_id=eval_id))
-            for item in output_items[:50]:
+            for item in output_items:
                 result["items"].append({
                     "id": getattr(item, "id", ""),
                     "status": getattr(item, "status", ""),

@@ -59,6 +59,39 @@ function getItemOverallStatus(results: any[]): ResultStatus {
   return 'pass'
 }
 
+/** Sort priority: fail=0 (first), error=1, pass=2 (last) */
+function statusSortPriority(status: ResultStatus): number {
+  if (status === 'fail') return 0
+  if (status === 'error') return 1
+  return 2
+}
+
+/** Sort items: failed first, then errored, then passed */
+function sortItemsByStatus(items: any[]): any[] {
+  return [...items].sort((a, b) => {
+    const sa = getItemOverallStatus(a.results || [])
+    const sb = getItemOverallStatus(b.results || [])
+    return statusSortPriority(sa) - statusSortPriority(sb)
+  })
+}
+
+/** Sort per-evaluator bars: most failures first, then errors, then clean pass */
+function sortPerEvaluator(evals: any[], items: any[]): any[] {
+  const itemCount = items?.length || 0
+  return [...evals].sort((a, b) => {
+    const aRan = (a.passed || 0) + (a.failed || 0)
+    const bRan = (b.passed || 0) + (b.failed || 0)
+    const aErrors = itemCount > 0 ? Math.max(0, itemCount - aRan) : 0
+    const bErrors = itemCount > 0 ? Math.max(0, itemCount - bRan) : 0
+    // Primary: more failures first
+    if ((a.failed || 0) !== (b.failed || 0)) return (b.failed || 0) - (a.failed || 0)
+    // Secondary: more errors first
+    if (aErrors !== bErrors) return bErrors - aErrors
+    // Tertiary: lower pass rate first
+    return (a.pass_rate || 0) - (b.pass_rate || 0)
+  })
+}
+
 // ---------------------------------------------------------------------------
 // Main Component
 // ---------------------------------------------------------------------------
@@ -143,6 +176,16 @@ function ResultsContent() {
     .filter(([, count]) => count > 0 && count < (result.items?.length || 1))
     .map(([name, count]) => `${name} (${count}/${result.items?.length || 0})`)
 
+  // Sort items and per-evaluator for display
+  const sortedItems = result.items ? sortItemsByStatus(result.items) : []
+  const sortedPerEvaluator = result.per_evaluator ? sortPerEvaluator(result.per_evaluator, result.items) : []
+
+  // Categorize always-errored evaluators
+  const TOOL_DEF_EVALUATORS = ['tool_call_accuracy', 'tool_selection', 'tool_input_accuracy', 'tool_output_utilization']
+  const LIMITED_SUPPORT_TOOLS = ['Azure AI Search', 'Code Interpreter', 'MCP']
+  const toolDefErrors = alwaysErrorEvaluators.filter(n => TOOL_DEF_EVALUATORS.includes(n))
+  const otherAlwaysErrors = alwaysErrorEvaluators.filter(n => !TOOL_DEF_EVALUATORS.includes(n))
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -191,11 +234,14 @@ function ResultsContent() {
               <Warning20Filled className="h-5 w-5 text-amber-500 flex-shrink-0 mt-0.5" />
               <div className="text-sm text-amber-700 dark:text-amber-300">
                 <strong>{result.result_counts.errored} of {result.result_counts.total} items</strong> had at least one evaluator that couldn&apos;t run ({totalEvaluatorErrors} individual evaluator errors total).
-                {alwaysErrorEvaluators.length > 0 && (
-                  <span> Evaluators that errored on every item: <strong>{alwaysErrorEvaluators.join(', ')}</strong>. These likely require <code className="text-xs bg-amber-100 dark:bg-amber-900/40 px-1 rounded">tool_definitions</code> or have limited support with your agent&apos;s tool types (Azure AI Search, MCP).</span>
+                {toolDefErrors.length > 0 && (
+                  <span> <strong>{toolDefErrors.join(', ')}</strong> errored on every item — these evaluators require <code className="text-xs bg-amber-100 dark:bg-amber-900/40 px-1 rounded">tool_definitions</code> and have <strong>limited support</strong> with {LIMITED_SUPPORT_TOOLS.join(', ')} tools (per <a href="https://learn.microsoft.com/en-us/azure/foundry/concepts/evaluation-evaluators/agent-evaluators#supported-tools" target="_blank" className="underline">MS Learn</a>). They work best with Function Tool (user-defined) tools.</span>
+                )}
+                {otherAlwaysErrors.length > 0 && (
+                  <span> Evaluators that errored on every item: <strong>{otherAlwaysErrors.join(', ')}</strong>.</span>
                 )}
                 {partialErrorEvaluators.length > 0 && (
-                  <span> Evaluators that errored on some items: <strong>{partialErrorEvaluators.join(', ')}</strong>.</span>
+                  <span> Evaluators that errored on some items: <strong>{partialErrorEvaluators.join(', ')}</strong> — these are likely transient Foundry service errors (retry by re-running the evaluation).</span>
                 )}
               </div>
             </div>
@@ -208,7 +254,7 @@ function ResultsContent() {
         <div className="rounded-2xl border border-stroke-divider bg-bg-card p-6">
           <h3 className="text-sm font-semibold text-fg-default mb-4">Per-Evaluator Results</h3>
           <div className="space-y-3">
-            {result.per_evaluator.map((ev: any) => {
+            {sortedPerEvaluator.map((ev: any) => {
               const ran = (ev.passed || 0) + (ev.failed || 0)
               // For error count: only compute if we can derive from actual items, not from
               // result_counts.total which is a cross-category aggregate (especially for red team)
@@ -258,20 +304,20 @@ function ResultsContent() {
       )}
 
       {/* Individual Items — paginated */}
-      {result.items && result.items.length > 0 && (() => {
-        const totalPages = Math.ceil(result.items.length / ITEMS_PER_PAGE)
+      {sortedItems.length > 0 && (() => {
+        const totalPages = Math.ceil(sortedItems.length / ITEMS_PER_PAGE)
         const startIdx = (currentPage - 1) * ITEMS_PER_PAGE
-        const pageItems = result.items.slice(startIdx, startIdx + ITEMS_PER_PAGE)
+        const pageItems = sortedItems.slice(startIdx, startIdx + ITEMS_PER_PAGE)
 
         return (
         <div className="rounded-2xl border border-stroke-divider bg-bg-card p-6">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-sm font-semibold text-fg-default">
-              Individual Results ({result.items.length} items)
+              Individual Results ({sortedItems.length} items)
             </h3>
             {totalPages > 1 && (
               <span className="text-xs text-fg-muted">
-                Page {currentPage} of {totalPages} · Showing {startIdx + 1}-{Math.min(startIdx + ITEMS_PER_PAGE, result.items.length)}
+                Page {currentPage} of {totalPages} · Showing {startIdx + 1}-{Math.min(startIdx + ITEMS_PER_PAGE, sortedItems.length)}
               </span>
             )}
           </div>
@@ -322,7 +368,7 @@ function ResultsContent() {
                       <div>
                         <span className="text-[10px] uppercase tracking-wider text-fg-subtle font-medium">Evaluator Scores</span>
                         <div className="space-y-2 mt-2">
-                          {item.results?.map((r: any, ridx: number) => {
+                          {[...(item.results || [])].sort((a: any, b: any) => statusSortPriority(getResultStatus(a)) - statusSortPriority(getResultStatus(b))).map((r: any, ridx: number) => {
                             const status = getResultStatus(r)
                             return (
                               <div key={ridx} className={cn(

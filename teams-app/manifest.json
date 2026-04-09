@@ -1,0 +1,52 @@
+{
+  "$schema": "https://developer.microsoft.com/en-us/json-schemas/teams/v1.16/MicrosoftTeams.schema.json",
+  "manifestVersion": "1.16",
+  "version": "1.0.0",
+  "id": "a3f7c8d1-9e4b-4a2f-b5c6-d7e8f0a1b2c3",
+  "developer": {
+    "name": "Foundry IQ",
+    "websiteUrl": "https://ambitious-smoke-063e2190f.1.azurestaticapps.net",
+    "privacyUrl": "https://ambitious-smoke-063e2190f.1.azurestaticapps.net",
+    "termsOfUseUrl": "https://ambitious-smoke-063e2190f.1.azurestaticapps.net"
+  },
+  "name": {
+    "short": "Foundry IQ",
+    "full": "Foundry IQ — AI Knowledge Retrieval Demo"
+  },
+  "description": {
+    "short": "Qatar Airways Contact Center AI Assistant powered by Azure AI Search & Foundry Agents",
+    "full": "Foundry IQ Demo provides AI-powered knowledge retrieval for contact center operators. Features include Knowledge Base queries via Azure AI Search, multi-tool Foundry Agents with KB retrieval, Code Interpreter, and MCP airport operations, plus a comprehensive evaluation platform for agent quality, safety, and red teaming."
+  },
+  "icons": {
+    "color": "color.png",
+    "outline": "outline.png"
+  },
+  "accentColor": "#6366F1",
+  "staticTabs": [
+    {
+      "entityId": "foundryiq-home",
+      "name": "Foundry IQ",
+      "contentUrl": "https://ambitious-smoke-063e2190f.1.azurestaticapps.net/agents",
+      "websiteUrl": "https://ambitious-smoke-063e2190f.1.azurestaticapps.net/agents",
+      "scopes": ["personal"]
+    },
+    {
+      "entityId": "foundryiq-playground",
+      "name": "Playground",
+      "contentUrl": "https://ambitious-smoke-063e2190f.1.azurestaticapps.net/test?edit=admin",
+      "websiteUrl": "https://ambitious-smoke-063e2190f.1.azurestaticapps.net/test?edit=admin",
+      "scopes": ["personal"]
+    },
+    {
+      "entityId": "foundryiq-evaluations",
+      "name": "Evaluations",
+      "contentUrl": "https://ambitious-smoke-063e2190f.1.azurestaticapps.net/evaluations?edit=admin",
+      "websiteUrl": "https://ambitious-smoke-063e2190f.1.azurestaticapps.net/evaluations?edit=admin",
+      "scopes": ["personal"]
+    }
+  ],
+  "permissions": ["identity", "messageTeamMembers"],
+  "validDomains": [
+    "ambitious-smoke-063e2190f.1.azurestaticapps.net"
+  ]
+}
