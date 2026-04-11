@@ -53,6 +53,7 @@ export default function RunEvaluationPage() {
   const [selectedEvaluators, setSelectedEvaluators] = useState<Set<string>>(new Set(['coherence', 'violence', 'task_adherence']))
   const [agentToolTypes, setAgentToolTypes] = useState<Set<string>>(new Set())
   const [agentToolsLoading, setAgentToolsLoading] = useState(false)
+  const [agentToolDefinitions, setAgentToolDefinitions] = useState<any[]>([])
   const [queries, setQueries] = useState("refund policy economy ticket\nbaggage allowance business class\npet transport cage sizes dogs\ncan i change my flight to tomorrow\nwhat happens if i miss my connecting flight\nupgrade from economy to business how much\ncheck in online not working\nqmice portal terminated can it be reactivated\nlost luggage compensation process\ndo you fly doha to boston direct\nis QR320 delayed today\nwheelchair assistance how to request\nunaccompanied minor policy age limit\nfrequent flyer miles expire?\nbaggage + pet in cabin same flight possible?\nrefund for cancelled flight AND rebooking options\nlounge access with economy ticket privilege club gold\ninfant bassinet availability long haul\nvisa transit doha do i need one\nboarding gate info doha to london today")
   const [syntheticPrompt, setSyntheticPrompt] = useState("You are simulating a Qatar Airways contact center. Generate realistic customer queries as a contact center operator would type them — short, informal, sometimes grammatically imperfect, using abbreviations. Mix difficulty levels:\n\nEASY (single-topic lookups): baggage limits, check-in times, meal options, seat selection, flight status\nMEDIUM (policy interpretation): refund eligibility, rebooking rules, upgrade costs, loyalty tier benefits, pet transport requirements, unaccompanied minors\nHARD (multi-topic combos): 'refund + rebooking options for cancelled flight', 'pet in cabin AND extra baggage same booking', 'transit visa doha + lounge access with economy ticket', 'upgrade cost business + extra legroom availability'\n\nInclude queries about: baggage, refunds, flight changes, loyalty/Privilege Club, check-in, pet transport, special assistance, MCP airport operations (delays, gates, runway usage), QMICE portal, visa/transit, infant/child policies. Write them as an operator would — not full sentences.")
   const [syntheticCount, setSyntheticCount] = useState(10)
@@ -103,6 +104,7 @@ export default function RunEvaluationPage() {
   useEffect(() => {
     if (!selectedAgent) {
       setAgentToolTypes(new Set())
+      setAgentToolDefinitions([])
       return
     }
     setAgentToolsLoading(true)
@@ -111,11 +113,23 @@ export default function RunEvaluationPage() {
       .then(data => {
         const tools = data?.definition?.tools || data?.versions?.latest?.definition?.tools || []
         const types = new Set<string>()
+        const toolDefs: any[] = []
         for (const tool of tools) {
           const t = tool.type || ''
           types.add(t)
+          // Generate tool_definitions in OpenAI function-calling schema
+          if (t === 'code_interpreter') {
+            toolDefs.push({ type: 'function', function: { name: 'code_interpreter', description: 'Execute Python code to analyze data and create visualizations.', parameters: { type: 'object', properties: {} } } })
+          } else if (t === 'mcp') {
+            const label = tool.server_label || 'mcp_tool'
+            const name = label.startsWith('kb_') ? 'knowledge_base_retrieve' : label
+            toolDefs.push({ type: 'function', function: { name, description: `MCP tool: ${label}`, parameters: { type: 'object', properties: { queries: { type: 'array', items: { type: 'string' } } }, required: ['queries'] } } })
+          } else if (t === 'function') {
+            toolDefs.push({ type: 'function', function: { name: tool.name || 'function', description: tool.description || '', parameters: tool.parameters || { type: 'object', properties: {} } } })
+          }
         }
         setAgentToolTypes(types)
+        setAgentToolDefinitions(toolDefs)
       })
       .catch(() => setAgentToolTypes(new Set()))
       .finally(() => setAgentToolsLoading(false))
@@ -145,12 +159,12 @@ export default function RunEvaluationPage() {
   const isEvaluatorDisabledByTools = (shortName: string): string | null => {
     if (evalType !== 'agent-target' && evalType !== 'synthetic') return null
     // tool_call_accuracy, tool_selection, tool_input_accuracy, tool_output_utilization
-    // always require tool_definitions in the test data — which agent-target mode
-    // does not provide. These evaluators error regardless of tool types.
-    // Per MS Learn: "Tool Call Accuracy | (query, response, tool_definitions)"
-    // Ref: https://learn.microsoft.com/en-us/azure/foundry/concepts/evaluation-evaluators/agent-evaluators
+    // require tool_definitions. If we have them (auto-detected from agent), enable.
     if (TOOL_DEF_EVALUATORS.has(shortName)) {
-      return 'Disabled — requires tool_definitions (not available in agent-target mode)'
+      if (agentToolDefinitions.length > 0) {
+        return null // Enabled — tool definitions available
+      }
+      return 'Disabled — requires tool_definitions (select an agent to auto-detect)'
     }
     if (!hasOnlyLimitedSupportTools) return null
     if (!LIMITED_SUPPORT_EVALUATORS.has(shortName)) return null
@@ -202,6 +216,7 @@ export default function RunEvaluationPage() {
           agent_name: selectedAgent,
           queries: queries.split('\n').filter(q => q.trim()).map(q => ({ query: q.trim() })),
           evaluators: Array.from(selectedEvaluators),
+          tool_definitions: agentToolDefinitions.length > 0 ? agentToolDefinitions : undefined,
         }
       } else if (evalType === 'response-ids') {
         endpoint = '/evaluate/by-response-ids'
@@ -243,6 +258,7 @@ export default function RunEvaluationPage() {
           prompt: syntheticPrompt,
           samples_count: syntheticCount,
           evaluators: Array.from(selectedEvaluators),
+          tool_definitions: agentToolDefinitions.length > 0 ? agentToolDefinitions : undefined,
         }
       }
 
@@ -344,6 +360,11 @@ export default function RunEvaluationPage() {
                 <span>. Some evaluators have been auto-disabled because this agent only uses tools with <a href="https://learn.microsoft.com/en-us/azure/foundry/concepts/evaluation-evaluators/agent-evaluators#supported-tools" target="_blank" className="underline">limited evaluator support</a>.</span>
               ) : (
                 <span>. This agent uses MCP/Function tools &mdash; all evaluators are available (<a href="https://learn.microsoft.com/en-us/azure/foundry/concepts/evaluation-evaluators/agent-evaluators#supported-tools" target="_blank" className="underline">full support</a>).</span>
+              )}
+              {agentToolDefinitions.length > 0 && (
+                <div className="mt-1 text-green-600 dark:text-green-400">
+                  ✓ <strong>{agentToolDefinitions.length} tool definition{agentToolDefinitions.length !== 1 ? 's' : ''}</strong> auto-detected &mdash; tool evaluators (tool_call_accuracy, tool_selection, etc.) are enabled.
+                </div>
               )}
             </div>
           )}

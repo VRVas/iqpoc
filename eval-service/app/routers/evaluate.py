@@ -52,6 +52,7 @@ class AgentTargetRequest(BaseModel):
     queries: list[dict]  # [{"query": "..."}, ...]
     evaluators: list[str] = Field(default_factory=lambda: ["coherence", "violence", "task_adherence"])
     model_deployment: Optional[str] = None
+    tool_definitions: Optional[list[dict]] = None  # OpenAI function-calling schema
 
 
 class ResponseIdsRequest(BaseModel):
@@ -69,6 +70,7 @@ class SyntheticEvalRequest(BaseModel):
     samples_count: int = 10
     evaluators: list[str] = Field(default_factory=lambda: ["coherence", "violence"])
     model_deployment: Optional[str] = None
+    tool_definitions: Optional[list[dict]] = None  # OpenAI function-calling schema
 
 
 class ModelTargetRequest(BaseModel):
@@ -154,6 +156,7 @@ async def evaluate_agent_target(req: AgentTargetRequest):
             queries=req.queries,
             evaluator_names=req.evaluators,
             model_deployment=model,
+            tool_definitions=req.tool_definitions,
         )
         return EvalRunResponse(
             eval_id=result["eval_id"],
@@ -206,6 +209,7 @@ async def evaluate_synthetic(req: SyntheticEvalRequest):
             samples_count=req.samples_count,
             evaluator_names=req.evaluators,
             model_deployment=model,
+            tool_definitions=req.tool_definitions,
         )
         return EvalRunResponse(
             eval_id=result["eval_id"],

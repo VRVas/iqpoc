@@ -258,6 +258,7 @@ def build_testing_criteria(
     model_deployment: str,
     use_sample_output: bool = False,
     eval_mode: str = "dataset",
+    has_tool_definitions: bool = False,
 ) -> list[dict]:
     """Build testing_criteria list from evaluator short names.
 
@@ -266,6 +267,11 @@ def build_testing_criteria(
         model_deployment: Model deployment name for AI-assisted evaluators
         use_sample_output: Whether to use {{sample.output_text}} instead of {{item.response}}
         eval_mode: One of "dataset", "agent_target", "response_ids" — filters incompatible evaluators
+        has_tool_definitions: Whether tool_definitions are available in the test data.
+            When True, tool evaluators get "tool_definitions": "{{item.tool_definitions}}" in data_mapping.
+            Per MS Learn: tool_call_accuracy, tool_selection, tool_input_accuracy, tool_output_utilization
+            all require tool_definitions.
+            Ref: https://learn.microsoft.com/en-us/azure/foundry/concepts/evaluation-evaluators/agent-evaluators#tool-definitions-format
 
     When use_sample_output is True (agent-target or synthetic eval),
     replace {{item.response}} with {{sample.output_text}} for non-agent evaluators.
@@ -308,7 +314,11 @@ def build_testing_criteria(
                 if v == "{{item.response}}":
                     mapping[k] = "{{sample.output_text}}"
         entry["data_mapping"] = mapping
-
+        # Add tool_definitions to data mapping for tool evaluators when available
+        # Per MS Learn: tool_call_accuracy, tool_selection, tool_input_accuracy,
+        # tool_output_utilization all require tool_definitions field
+        if has_tool_definitions and reg.get(\"requires_tool_definitions\"):
+            entry[\"data_mapping\"][\"tool_definitions\"] = \"{{item.tool_definitions}}\"
         # Model deployment for AI-assisted evaluators
         if reg["requires_model"]:
             entry["initialization_parameters"] = {"deployment_name": model_deployment}
@@ -437,24 +447,41 @@ def create_eval_and_run_agent_target(
     queries: list[dict],
     evaluator_names: list[str],
     model_deployment: str,
+    tool_definitions: Optional[list[dict]] = None,
 ) -> dict:
     """Send queries to an agent and evaluate responses.
 
+    Args:
+        tool_definitions: Optional list of tool definitions (OpenAI function-calling schema).
+            When provided, tool evaluators can assess tool call quality.
+            Ref: https://learn.microsoft.com/en-us/azure/foundry/concepts/evaluation-evaluators/agent-evaluators#tool-definitions-format
+
     Ref: https://learn.microsoft.com/en-us/azure/foundry/how-to/develop/cloud-evaluation?tabs=python#agent-target-evaluation
     """
+    import json as _json
     client = get_openai_client()
+
+    # Build item schema — include tool_definitions if provided
+    schema_props: dict = {"query": {"type": "string"}}
+    if tool_definitions:
+        schema_props["tool_definitions"] = {"type": "string"}
 
     data_source_config = DataSourceConfigCustom(
         type="custom",
         item_schema={
             "type": "object",
-            "properties": {"query": {"type": "string"}},
+            "properties": schema_props,
             "required": ["query"],
         },
         include_sample_schema=True,
     )
 
-    testing_criteria = build_testing_criteria(evaluator_names, model_deployment, use_sample_output=True, eval_mode="agent_target")
+    has_tool_defs = bool(tool_definitions)
+    testing_criteria = build_testing_criteria(
+        evaluator_names, model_deployment,
+        use_sample_output=True, eval_mode="agent_target",
+        has_tool_definitions=has_tool_defs,
+    )
 
     eval_obj = client.evals.create(
         name=name,
@@ -474,9 +501,17 @@ def create_eval_and_run_agent_target(
     if agent_version:
         target["version"] = agent_version
 
+    # Inject tool_definitions into each query item if provided
+    query_items = []
+    for q in queries:
+        item = dict(q)
+        if tool_definitions:
+            item["tool_definitions"] = _json.dumps(tool_definitions)
+        query_items.append(item)
+
     data_source = {
         "type": "azure_ai_target_completions",
-        "source": {"type": "file_content", "content": [{"item": q} for q in queries]},
+        "source": {"type": "file_content", "content": [{"item": q} for q in query_items]},
         "input_messages": input_messages,
         "target": target,
     }
@@ -499,6 +534,7 @@ def create_eval_and_run_synthetic(
     samples_count: int,
     evaluator_names: list[str],
     model_deployment: str,
+    tool_definitions: Optional[list[dict]] = None,
 ) -> dict:
     """Generate synthetic queries and evaluate agent responses.
 
@@ -508,7 +544,11 @@ def create_eval_and_run_synthetic(
 
     data_source_config = {"type": "azure_ai_source", "scenario": "synthetic_data_gen_preview"}
 
-    testing_criteria = build_testing_criteria(evaluator_names, model_deployment, use_sample_output=True, eval_mode="synthetic")
+    testing_criteria = build_testing_criteria(
+        evaluator_names, model_deployment,
+        use_sample_output=True, eval_mode="synthetic",
+        has_tool_definitions=bool(tool_definitions),
+    )
 
     eval_obj = client.evals.create(
         name=name,
