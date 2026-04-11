@@ -669,13 +669,29 @@ function AgentBuilderPageContent() {
         // MCP approval request — shouldn't happen when require_approval is 'never'
         // No action needed
       } else if (item.type === 'mcp_call') {
-        // MCP tool call (remote MCP servers like airport-ops, or legacy KB MCP)
+        // MCP tool call — Foundry-native KB retrieval or external MCP (airport-ops)
+        // For KB MCP calls, the backend attaches _mcpSources with parsed references
+        // Ref: https://learn.microsoft.com/en-us/azure/foundry/agents/how-to/foundry-iq-connect
         mcpCalls.push({
           type: 'mcp',
           name: item.name || 'mcp_tool',
           server_label: item.server_label || '',
           arguments: item.arguments,
         })
+
+        // Extract KB sources from MCP call if backend parsed them
+        if (item._mcpSources && Array.isArray(item._mcpSources)) {
+          for (const src of item._mcpSources) {
+            references.push({
+              type: src.type || 'AzureSearchDoc',
+              id: String(references.length),
+              activitySource: 0,
+              docKey: src.docKey || '',
+              blobUrl: src.blobUrl || '',
+              sourceData: src.sourceData || { title: 'Source', snippet: '' },
+            } as any)
+          }
+        }
       } else if (item.type === 'mcp_call_output') {
         // MCP tool results (remote MCP servers or legacy KB MCP)
         try {

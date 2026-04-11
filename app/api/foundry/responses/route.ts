@@ -7,21 +7,20 @@ import { getQatarDateTime } from '@/lib/utils'
  *
  * Sends a message and gets an agent response (v2 API).
  *
- * This route implements a **function-call loop** for KB retrieval:
+ * KB retrieval flow:
+ * - NEW (MCP): Foundry executes KB retrieval server-side via the MCP connection.
+ *   The response arrives complete with mcp_call items containing source data.
+ *   No function-call loop needed.
+ *   Ref: https://learn.microsoft.com/en-us/azure/foundry/agents/how-to/foundry-iq-connect
  *
- * 1. Send the user's message to the agent via POST /openai/responses
- * 2. If the response contains a function_call to "knowledge_base_retrieve",
- *    execute the KB retrieval via the Azure AI Search REST API
- * 3. Send the retrieval results back to the agent via a follow-up request
- *    with previous_response_id and function_call_output
- * 4. Repeat until the agent produces a final text response (no more function calls)
+ * - LEGACY (function tool): If the agent still has the old function tool
+ *   (knowledge_base_retrieve), our app catches the function_call, executes
+ *   KB retrieval via the Azure AI Search REST API, and sends the result back.
+ *   This loop remains for backward compatibility with older agent versions.
  *
- * This approach bypasses the MCP transport entirely (which has a 405 issue
- * due to GET/POST transport mismatch) and uses the proven KB retrieval API.
- *
- * Response shape returned to the client includes both function call info
- * and the final assistant message, so the UI can display the retrieval
- * journey + citations.
+ * Response shape returned to the client includes both tool call info
+ * (MCP or function) and the final assistant message, so the UI can
+ * display sources + citations.
  */
 export async function POST(request: Request) {
   try {
@@ -138,6 +137,26 @@ export async function POST(request: Request) {
         // No more function calls — this is the final response
         // Merge accumulated items from intermediate iterations with the final output
         const finalOutput = [...allOutputItems, ...(data.output || [])]
+
+        // Parse MCP KB call outputs to extract source data for the frontend.
+        // When the agent uses Foundry-native MCP KB tools, the mcp_call output
+        // contains the synthesized answer + source blocks in a specific format:
+        //   【N:M†source】 followed by JSON with uid, blob_url, snippet
+        // We parse these into _mcpSources for the frontend citation pipeline.
+        // Ref: Phase 0 validation (Foundry IQ MCP response structure)
+        for (const item of finalOutput) {
+          if (item.type === 'mcp_call' && typeof item.output === 'string') {
+            try {
+              const sources = parseMcpKbSources(item.output)
+              if (sources.length > 0) {
+                item._mcpSources = sources
+              }
+            } catch (parseErr) {
+              console.warn('[responses/v2] MCP source parsing warning:', parseErr)
+            }
+          }
+        }
+
         data.output = finalOutput
         data._functionCallLoops = loopCount
 
@@ -346,4 +365,101 @@ function formatRetrievalForAgent(result: any): string {
   }
 
   return parts.join('\n') || 'No results found.'
+}
+
+/**
+ * Parse MCP KB tool output to extract source references.
+ *
+ * When Foundry executes a knowledge_base_retrieve MCP call, the output is
+ * a text blob structured as:
+ *   "Retrieved N documents.[synthesized answer]
+ *    【4:0†source】
+ *    { uid, blob_url, snippet }
+ *    【4:1†source】
+ *    { uid, blob_url, snippet }
+ *    ..."
+ *
+ * Each 【N:M†source】 block contains a JSON object with the source document
+ * metadata (uid, blob_url, snippet). We parse these into an array that the
+ * frontend can use for the Sources Panel.
+ *
+ * This format was validated in Phase 0 testing against the live Foundry
+ * MCP endpoint for the test41miniweb KB.
+ */
+function parseMcpKbSources(output: string): any[] {
+  const sources: any[] = []
+
+  // Split on 【...†source】 markers — each is followed by a JSON object or text
+  // The marker format is: 【N:M†source】 where N = message index, M = source index
+  const markerRegex = /【(\d+):(\d+)†source】/g
+  const markers: { index: number; sourceIdx: number; matchEnd: number }[] = []
+  let match: RegExpExecArray | null
+
+  while ((match = markerRegex.exec(output)) !== null) {
+    markers.push({
+      index: match.index,
+      sourceIdx: parseInt(match[2], 10),
+      matchEnd: match.index + match[0].length,
+    })
+  }
+
+  for (let i = 0; i < markers.length; i++) {
+    const start = markers[i].matchEnd
+    const end = i + 1 < markers.length ? markers[i + 1].index : output.length
+    const block = output.slice(start, end).trim()
+
+    if (!block) continue
+
+    // Try to parse as JSON (source blocks contain { uid, blob_url, snippet })
+    try {
+      const parsed = JSON.parse(block)
+      sources.push({
+        type: 'AzureSearchDoc',
+        id: String(markers[i].sourceIdx),
+        docKey: parsed.uid || '',
+        blobUrl: parsed.blob_url || '',
+        sourceData: {
+          title: deriveTitle(parsed.blob_url || parsed.uid || ''),
+          snippet: parsed.snippet || '',
+          content: parsed.snippet || '',
+        },
+      })
+    } catch {
+      // Not JSON — might be plain text source content
+      if (block.length > 10) {
+        sources.push({
+          type: 'AzureSearchDoc',
+          id: String(markers[i].sourceIdx),
+          docKey: '',
+          sourceData: {
+            title: `Source ${markers[i].sourceIdx + 1}`,
+            snippet: block.slice(0, 500),
+            content: block.slice(0, 500),
+          },
+        })
+      }
+    }
+  }
+
+  return sources
+}
+
+/**
+ * Derive a human-readable title from a blob URL or UID.
+ */
+function deriveTitle(urlOrUid: string): string {
+  if (!urlOrUid) return 'Unknown Source'
+  try {
+    // Extract filename from blob URL
+    const parts = urlOrUid.split('/')
+    const filename = decodeURIComponent(parts[parts.length - 1] || '')
+    // Remove extension, replace separators with spaces
+    return filename
+      .replace(/\.[^.]+$/, '')
+      .replace(/[_+]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim() || 'Unknown Source'
+  } catch {
+    return urlOrUid.slice(0, 60)
+  }
 }

@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { agentsV2Url, foundryHeaders, buildKbFunctionTool } from '../helpers'
+import { agentsV2Url, foundryHeaders, ensureMcpConnection, buildMcpTool } from '../helpers'
 
 /**
  * POST /api/foundry/agents
@@ -7,9 +7,12 @@ import { agentsV2Url, foundryHeaders, buildKbFunctionTool } from '../helpers'
  * Creates a new Foundry agent (v2 API).
  * Body: { name, model, instructions, knowledgeBases?, tools? }
  *
- * For each selected knowledge base, creates a function tool definition
- * that the agent can call. The responses route handles executing
- * the actual KB retrieval when the agent calls the function.
+ * For each selected knowledge base, creates a Foundry MCP connection
+ * (RemoteTool with ProjectManagedIdentity auth) and adds an MCPTool
+ * to the agent's definition. Foundry executes KB retrieval server-side
+ * via the MCP endpoint — no function-call loop needed in our app.
+ *
+ * Ref: https://learn.microsoft.com/en-us/azure/foundry/agents/how-to/foundry-iq-connect
  */
 export async function POST(request: Request) {
   try {
@@ -19,10 +22,19 @@ export async function POST(request: Request) {
     // Build tools array
     const tools: Record<string, unknown>[] = []
 
-    // Add function tool for KB retrieval if knowledge bases are selected
+    // Add MCP tools for KB retrieval — Foundry executes these server-side
+    // Per MS Learn: each KB gets a RemoteTool project connection + MCPTool
+    // Ref: https://learn.microsoft.com/en-us/azure/foundry/agents/how-to/foundry-iq-connect#create-an-agent-with-the-mcp-tool
     const knowledgeBases: string[] = body.knowledgeBases || []
-    if (knowledgeBases.length > 0) {
-      tools.push(buildKbFunctionTool(knowledgeBases))
+    for (const kbName of knowledgeBases) {
+      try {
+        const connectionName = await ensureMcpConnection(kbName)
+        tools.push(buildMcpTool(kbName, connectionName))
+        console.log(`[agents/v2] Added MCP KB tool for "${kbName}" (connection: ${connectionName})`)
+      } catch (err) {
+        console.error(`[agents/v2] Failed to create MCP connection for KB "${kbName}":`, err)
+        // Continue with other KBs — don't block agent creation
+      }
     }
 
     // Add optional tools

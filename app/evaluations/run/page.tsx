@@ -123,21 +123,22 @@ export default function RunEvaluationPage() {
 
   // Determine which evaluators should be disabled based on agent's tool types
   // Per MS Learn "Supported tools" section:
-  // LIMITED support tools: azure_ai_search, code_interpreter, bing_grounding, sharepoint_grounding, fabric
-  // FULL support: function (user-defined), mcp (except knowledge-based MCP)
+  //   https://learn.microsoft.com/en-us/azure/foundry/concepts/evaluation-evaluators/agent-evaluators#supported-tools
+  // FULL support: Function Tool, MCP, Knowledge-based MCP
+  // LIMITED support: Azure AI Search (native), Code Interpreter, Bing, SharePoint, Fabric
   const LIMITED_SUPPORT_TOOL_TYPES = new Set(['azure_ai_search', 'code_interpreter', 'bing_grounding', 'bing_custom_search', 'sharepoint_grounding', 'fabric'])
   const TOOL_DEF_EVALUATORS = new Set(['tool_call_accuracy', 'tool_selection', 'tool_input_accuracy', 'tool_output_utilization'])
-  const LIMITED_SUPPORT_EVALUATORS = new Set([...TOOL_DEF_EVALUATORS, 'tool_call_success', 'groundedness'])
+  const LIMITED_SUPPORT_EVALUATORS = new Set([...Array.from(TOOL_DEF_EVALUATORS), 'tool_call_success', 'groundedness'])
 
   const hasOnlyLimitedSupportTools = (() => {
     if (agentToolTypes.size === 0) return false
-    // Check if ALL tools are in the limited-support category
-    // "function" type tools have full support, so if any function tool exists, not limited-only
+    // MCP tools (including KB MCP) have FULL evaluator support per MS Learn
+    const hasMcpTool = agentToolTypes.has('mcp')
+    if (hasMcpTool) return false
+    // Function tools also have full support
     const hasFunctionTool = agentToolTypes.has('function')
     if (hasFunctionTool) return false
-    // MCP tools that are NOT knowledge-based have full support
-    // Our function tool "knowledge_base_retrieve" is type "function" so it's fine
-    // If only azure_ai_search, code_interpreter, mcp (knowledge-based) → limited
+    // If only azure_ai_search, code_interpreter, etc. → limited support
     return true
   })()
 
@@ -335,9 +336,9 @@ export default function RunEvaluationPage() {
             )}>
               <strong>Agent tools detected:</strong> {Array.from(agentToolTypes).join(', ')}
               {hasOnlyLimitedSupportTools ? (
-                <span>. Some evaluators have been auto-disabled because this agent only uses tools with <a href="https://learn.microsoft.com/en-us/azure/foundry/concepts/evaluation-evaluators/agent-evaluators#supported-tools" target="_blank" className="underline">limited evaluator support</a> (Azure AI Search, Code Interpreter, MCP).</span>
+                <span>. Some evaluators have been auto-disabled because this agent only uses tools with <a href="https://learn.microsoft.com/en-us/azure/foundry/concepts/evaluation-evaluators/agent-evaluators#supported-tools" target="_blank" className="underline">limited evaluator support</a>.</span>
               ) : (
-                <span>. This agent has Function Tool definitions — all evaluators are available.</span>
+                <span>. This agent uses MCP/Function tools &mdash; all evaluators are available (<a href="https://learn.microsoft.com/en-us/azure/foundry/concepts/evaluation-evaluators/agent-evaluators#supported-tools" target="_blank" className="underline">full support</a>).</span>
               )}
             </div>
           )}

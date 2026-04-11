@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { agentsV2Url, foundryHeaders, buildKbFunctionTool } from '../../helpers'
+import { agentsV2Url, foundryHeaders, ensureMcpConnection, buildMcpTool } from '../../helpers'
 
 /**
  * GET /api/foundry/agents/[name]
@@ -60,19 +60,28 @@ export async function PATCH(
     // Build tools array
     const tools: Record<string, unknown>[] = []
 
-    // Add function tool for KB retrieval if knowledge bases are selected
+    // Add MCP tools for KB retrieval — Foundry executes these server-side
+    // Per MS Learn: each KB gets a RemoteTool project connection + MCPTool
+    // Ref: https://learn.microsoft.com/en-us/azure/foundry/agents/how-to/foundry-iq-connect#create-an-agent-with-the-mcp-tool
     const knowledgeBases: string[] = body.knowledgeBases || []
-    if (knowledgeBases.length > 0) {
-      tools.push(buildKbFunctionTool(knowledgeBases))
+    for (const kbName of knowledgeBases) {
+      try {
+        const connectionName = await ensureMcpConnection(kbName)
+        tools.push(buildMcpTool(kbName, connectionName))
+        console.log(`[agents/v2] Added MCP KB tool for "${kbName}" (connection: ${connectionName})`)
+      } catch (err) {
+        console.error(`[agents/v2] Failed to create MCP connection for KB "${kbName}":`, err)
+      }
     }
 
-    // Add optional tools
+    // Add optional tools (skip old KB tools — replaced by MCP above)
     if (body.tools) {
       for (const tool of body.tools) {
-        if (tool.type === 'azure_ai_search') continue // replaced by function tool
-        // Only skip KB-related MCP tools (replaced by function tool);
-        // allow external MCP tools (e.g. airport-ops) through
+        if (tool.type === 'azure_ai_search') continue
+        // Skip old KB-related MCP tools — fresh ones created above
         if (tool.type === 'mcp' && tool.server_label?.startsWith('kb_')) continue
+        // Skip old function tool for KB retrieval
+        if (tool.type === 'function' && tool.name === 'knowledge_base_retrieve') continue
         tools.push(tool)
       }
     }

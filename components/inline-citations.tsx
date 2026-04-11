@@ -35,7 +35,11 @@ export const InlineCitationsText: React.FC<InlineCitationsTextProps> = ({
   const render = React.useMemo(() => {
     if (!text) return null
     const nodes: React.ReactNode[] = []
-    const regex = /\[ref_id:(\d+)\]/g
+    // Match both citation formats:
+    // - [ref_id:N]         → our function-tool format (KB Playground)
+    // - 【N:M†source】      → Foundry's native MCP citation format (Agent mode)
+    // Ref: https://learn.microsoft.com/en-us/azure/foundry/agents/how-to/foundry-iq-connect
+    const regex = /\[ref_id:(\d+)\]|【(\d+):(\d+)†source】/g
     let lastIndex = 0
     let match: RegExpExecArray | null
 
@@ -45,7 +49,10 @@ export const InlineCitationsText: React.FC<InlineCitationsTextProps> = ({
         nodes.push(text.slice(lastIndex, match.index))
       }
 
-      const refIdx = parseInt(match[1], 10)
+      // Determine the reference index from whichever format matched
+      const refIdx = match[1] !== undefined
+        ? parseInt(match[1], 10)       // [ref_id:N] → index N
+        : parseInt(match[3], 10)        // 【N:M†source】 → source index M
       const ref = references[refIdx]
 
       if (ref) {
