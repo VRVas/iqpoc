@@ -411,7 +411,7 @@ function SidebarLink({ item, isActive, onClick, collapsed }: SidebarLinkProps) {
       )}
     >
       {isActive && (
-  <div className="absolute left-1.5 top-1/2 h-6 w-1 -translate-y-1/2 rounded-full bg-accent" />
+  <div className={cn('absolute top-1/2 h-6 w-1 -translate-y-1/2 rounded-full bg-accent', collapsed ? 'left-0' : 'left-1.5')} />
       )}
       <Icon className={cn('h-5 w-5 flex-shrink-0', isActive ? '' : 'text-fg-muted group-hover:text-fg-default')} />
       {!collapsed && <span className="truncate tracking-tight">{item.label}</span>}

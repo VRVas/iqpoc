@@ -1,6 +1,7 @@
 'use client'
 
 import * as React from 'react'
+import { createPortal } from 'react-dom'
 import { cn } from '@/lib/utils'
 
 interface TooltipProps {
@@ -15,6 +16,9 @@ export function Tooltip({ content, children, side = 'top', className }: TooltipP
   const [position, setPosition] = React.useState({ x: 0, y: 0 })
   const triggerRef = React.useRef<HTMLDivElement>(null)
   const tooltipRef = React.useRef<HTMLDivElement>(null)
+  const [mounted, setMounted] = React.useState(false)
+
+  React.useEffect(() => { setMounted(true) }, [])
 
   const updatePosition = React.useCallback(() => {
     if (!triggerRef.current || !tooltipRef.current) return
@@ -64,6 +68,33 @@ export function Tooltip({ content, children, side = 'top', className }: TooltipP
     }
   }, [isVisible, updatePosition])
 
+  const tooltipEl = isVisible ? (
+    <div
+      ref={tooltipRef}
+      className={cn(
+        'pointer-events-none fixed rounded-lg border border-glass-border bg-fg-default/90 px-3 py-2 text-xs font-medium text-bg-card shadow-lg backdrop-blur-surface',
+        'animate-in fade-in-0 zoom-in-95',
+        className
+      )}
+      style={{
+        left: `${position.x}px`,
+        top: `${position.y}px`,
+        zIndex: 99999,
+      }}
+    >
+      {content}
+      <div
+        className={cn(
+          'absolute h-2 w-2 rotate-45 bg-fg-default/90',
+          side === 'top' && 'bottom-[-4px] left-1/2 -translate-x-1/2',
+          side === 'bottom' && 'top-[-4px] left-1/2 -translate-x-1/2',
+          side === 'left' && 'right-[-4px] top-1/2 -translate-y-1/2',
+          side === 'right' && 'left-[-4px] top-1/2 -translate-y-1/2'
+        )}
+      />
+    </div>
+  ) : null
+
   return (
     <>
       <div
@@ -76,32 +107,7 @@ export function Tooltip({ content, children, side = 'top', className }: TooltipP
       >
         {children}
       </div>
-      
-      {isVisible && (
-        <div
-          ref={tooltipRef}
-          className={cn(
-            'pointer-events-none fixed z-50 rounded-lg border border-glass-border bg-fg-default/90 px-3 py-2 text-xs font-medium text-bg-card shadow-lg backdrop-blur-surface',
-            'animate-in fade-in-0 zoom-in-95',
-            className
-          )}
-          style={{
-            left: `${position.x}px`,
-            top: `${position.y}px`,
-          }}
-        >
-          {content}
-          <div
-            className={cn(
-              'absolute h-2 w-2 rotate-45 bg-fg-default/90',
-              side === 'top' && 'bottom-[-4px] left-1/2 -translate-x-1/2',
-              side === 'bottom' && 'top-[-4px] left-1/2 -translate-x-1/2',
-              side === 'left' && 'right-[-4px] top-1/2 -translate-y-1/2',
-              side === 'right' && 'left-[-4px] top-1/2 -translate-y-1/2'
-            )}
-          />
-        </div>
-      )}
+      {mounted && tooltipEl && createPortal(tooltipEl, document.body)}
     </>
   )
 }

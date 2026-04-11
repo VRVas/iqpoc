@@ -1164,7 +1164,8 @@ function AgentBuilderPageContent() {
                         if (value === 'create-new') {
                           handleCreateNewKnowledgeBase()
                         } else if (value && value !== '') {
-                          handleKnowledgeBaseToggle(value)
+                          // Single-select: replace current KB instead of adding
+                          setSelectedKnowledgeBases(new Set([value]))
                         }
                         // Reset dropdown to placeholder
                         setTimeout(() => {
@@ -1174,7 +1175,7 @@ function AgentBuilderPageContent() {
                       defaultValue=""
                     >
                       <option value="" disabled>
-                        + Add knowledge base
+                        {selectedKnowledgeBases.size > 0 ? 'Change knowledge base' : '+ Select knowledge base'}
                       </option>
                       {knowledgeBases
                         .filter(base => !selectedKnowledgeBases.has(base.name))
@@ -1371,16 +1372,16 @@ function AgentBuilderPageContent() {
             <div>
               <h3 className="text-sm font-semibold mb-2">Knowledge Bases</h3>
               <div className="space-y-2">
-                {/* Dropdown for adding knowledge bases */}
+                {/* KB dropdown — hidden when a KB is already selected */}
+                {selectedKnowledgeBases.size === 0 && (
                 <div className="relative">
                   <select
                     className="w-full text-xs p-2 pr-8 border border-stroke-card rounded bg-bg-tertiary text-fg-primary appearance-none cursor-pointer hover:border-stroke-accent focus:outline-none focus:ring-1 focus:ring-stroke-focus"
                     onChange={(e) => {
                       const value = e.target.value
                       if (value && value !== '') {
-                        handleKnowledgeBaseToggle(value)
+                        setSelectedKnowledgeBases(new Set([value]))
                       }
-                      // Reset dropdown to placeholder
                       setTimeout(() => {
                         e.target.value = ''
                       }, 100)
@@ -1388,7 +1389,7 @@ function AgentBuilderPageContent() {
                     defaultValue=""
                   >
                     <option value="" disabled>
-                      + Add knowledge base
+                      + Select knowledge base
                     </option>
                     {knowledgeBases
                       .filter(base => !selectedKnowledgeBases.has(base.name))
@@ -1407,29 +1408,30 @@ function AgentBuilderPageContent() {
                     </svg>
                   </div>
                 </div>
+                )}
 
-                {/* Selected knowledge bases */}
-                {Array.from(selectedKnowledgeBases).map(baseName => (
-                  <div key={baseName} className="flex items-center justify-between text-xs p-2 bg-bg-tertiary rounded">
-                    <div className="flex-1 min-w-0">
-                      <div className="font-medium truncate">{baseName}</div>
-                      <div className="text-fg-muted">MCP Tool: kb_{baseName.replace(/[^a-zA-Z0-9_]/g, '_')}</div>
-                    </div>
-                    <button
-                      onClick={() => handleKnowledgeBaseToggle(baseName)}
-                      className="ml-2 p-1 hover:bg-bg-hover rounded text-fg-muted hover:text-fg-default"
-                      title="Remove knowledge base"
-                    >
-                      <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                      </svg>
-                    </button>
-                  </div>
-                ))}
-
-                {selectedKnowledgeBases.size === 0 && (
+                {/* Selected knowledge base — single select with Change button */}
+                {selectedKnowledgeBases.size > 0 ? (
+                  <>
+                    {Array.from(selectedKnowledgeBases).slice(0, 1).map(baseName => (
+                      <div key={baseName} className="flex items-center justify-between text-xs p-2 bg-bg-tertiary rounded">
+                        <div className="flex-1 min-w-0">
+                          <div className="font-medium truncate">{baseName}</div>
+                          <div className="text-fg-muted">MCP Tool: kb_{baseName.replace(/[^a-zA-Z0-9_]/g, '_')}</div>
+                        </div>
+                        <button
+                          onClick={() => setSelectedKnowledgeBases(new Set())}
+                          className="ml-2 px-2 py-1 text-[10px] rounded bg-bg-secondary hover:bg-bg-hover text-fg-muted hover:text-fg-default border border-stroke-card"
+                          title="Change knowledge base"
+                        >
+                          Change
+                        </button>
+                      </div>
+                    ))}
+                  </>
+                ) : (
                   <div className="text-xs text-fg-muted text-center py-2">
-                    No knowledge bases selected
+                    No knowledge base selected
                   </div>
                 )}
               </div>
@@ -1450,24 +1452,6 @@ function AgentBuilderPageContent() {
                 <label className="flex items-center gap-2 text-xs p-2 bg-bg-tertiary rounded cursor-pointer hover:bg-bg-hover">
                   <input
                     type="checkbox"
-                    checked={enabledTools.fileSearch}
-                    onChange={(e) => { setEnabledTools({...enabledTools, fileSearch: e.target.checked}); setSettingsDirty(true) }}
-                    className="h-3.5 w-3.5"
-                  />
-                  <span className="font-medium">File Search</span>
-                </label>
-                <label className="flex items-center gap-2 text-xs p-2 bg-bg-tertiary rounded cursor-pointer hover:bg-bg-hover">
-                  <input
-                    type="checkbox"
-                    checked={enabledTools.webSearch}
-                    onChange={(e) => { setEnabledTools({...enabledTools, webSearch: e.target.checked}); setSettingsDirty(true) }}
-                    className="h-3.5 w-3.5"
-                  />
-                  <span className="font-medium">Web Search</span>
-                </label>
-                <label className="flex items-center gap-2 text-xs p-2 bg-bg-tertiary rounded cursor-pointer hover:bg-bg-hover">
-                  <input
-                    type="checkbox"
                     checked={enabledTools.airportOps}
                     onChange={(e) => { setEnabledTools({...enabledTools, airportOps: e.target.checked}); setSettingsDirty(true) }}
                     className="h-3.5 w-3.5"
@@ -1476,6 +1460,16 @@ function AgentBuilderPageContent() {
                     <span className="font-medium">Airport Ops (MCP)</span>
                     <Airplane20Regular className="h-3 w-3 text-fg-muted" />
                   </div>
+                </label>
+                <label className="flex items-center gap-2 text-xs p-2 bg-bg-tertiary rounded opacity-40 cursor-not-allowed">
+                  <input type="checkbox" checked={false} disabled className="h-3.5 w-3.5" />
+                  <span className="font-medium">File Search</span>
+                  <span className="text-[9px] text-fg-subtle">N/A</span>
+                </label>
+                <label className="flex items-center gap-2 text-xs p-2 bg-bg-tertiary rounded opacity-40 cursor-not-allowed">
+                  <input type="checkbox" checked={false} disabled className="h-3.5 w-3.5" />
+                  <span className="font-medium">Web Search</span>
+                  <span className="text-[9px] text-fg-subtle">N/A</span>
                 </label>
               </div>
             </div>
@@ -1602,43 +1596,6 @@ function AgentBuilderPageContent() {
                       >
                         i
                       </button>
-                      {/* Export chat button */}
-                      {messages.length > 1 && (
-                        <div className="relative">
-                          <button
-                            onClick={() => {
-                              const el = document.getElementById('export-menu')
-                              if (el) el.classList.toggle('hidden')
-                            }}
-                            className="h-7 w-7 rounded-full flex items-center justify-center text-xs border bg-bg-secondary text-fg-muted border-stroke-card hover:border-accent hover:text-accent transition-colors"
-                            title="Export Conversation"
-                          >
-                            ↓
-                          </button>
-                          <div id="export-menu" className="hidden absolute top-full right-0 mt-1 z-50 w-52 rounded-xl border border-stroke-divider bg-bg-card shadow-xl py-1">
-                            <button
-                              onClick={() => {
-                                exportChatAsJsonl()
-                                document.getElementById('export-menu')?.classList.add('hidden')
-                              }}
-                              className="w-full text-left px-3 py-2 text-xs hover:bg-bg-secondary transition-colors"
-                            >
-                              <div className="font-medium text-fg-default">Dataset (JSONL)</div>
-                              <div className="text-[10px] text-fg-muted">For evaluation — query, response, context</div>
-                            </button>
-                            <button
-                              onClick={() => {
-                                exportChatAsMarkdown()
-                                document.getElementById('export-menu')?.classList.add('hidden')
-                              }}
-                              className="w-full text-left px-3 py-2 text-xs hover:bg-bg-secondary transition-colors"
-                            >
-                              <div className="font-medium text-fg-default">Prettified (Markdown)</div>
-                              <div className="text-[10px] text-fg-muted">Formatted conversation log</div>
-                            </button>
-                          </div>
-                        </div>
-                      )}
                       {/* Agent info popover */}
                       {showAgentInfo && (
                         <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 z-50 w-80 max-h-[70vh] overflow-y-auto rounded-xl border border-stroke-divider bg-bg-card shadow-2xl p-4 space-y-3">
@@ -1701,26 +1658,53 @@ function AgentBuilderPageContent() {
                     </div>
                   </div>
                 )}
+                {/* Export chat button — sibling to agent info */}
+                {messages.length > 1 && (
+                  <div className="relative">
+                    <button
+                      onClick={() => {
+                        const el = document.getElementById('export-menu')
+                        if (el) el.classList.toggle('hidden')
+                      }}
+                      className="h-7 w-7 rounded-full flex items-center justify-center text-xs border bg-bg-secondary text-fg-muted border-stroke-card hover:border-accent hover:text-accent transition-colors"
+                      title="Export Conversation"
+                    >
+                      ↓
+                    </button>
+                    <div id="export-menu" className="hidden absolute top-full right-0 mt-1 z-50 w-52 rounded-xl border border-stroke-divider bg-bg-card shadow-xl py-1">
+                      <button
+                        onClick={() => { exportChatAsJsonl(); document.getElementById('export-menu')?.classList.add('hidden') }}
+                        className="w-full text-left px-3 py-2 text-xs hover:bg-bg-secondary transition-colors"
+                      >
+                        <div className="font-medium text-fg-default">Dataset (JSONL)</div>
+                        <div className="text-[10px] text-fg-muted">For evaluation — query, response, context</div>
+                      </button>
+                      <button
+                        onClick={() => { exportChatAsMarkdown(); document.getElementById('export-menu')?.classList.add('hidden') }}
+                        className="w-full text-left px-3 py-2 text-xs hover:bg-bg-secondary transition-colors"
+                      >
+                        <div className="font-medium text-fg-default">Prettified (Markdown)</div>
+                        <div className="text-[10px] text-fg-muted">Formatted conversation log</div>
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
-              {/* Runtime settings toggle — knowledge source parameters */}
+              {/* Source Settings info — read-only in agent mode since MCP uses KB defaults */}
               {selectedKnowledgeBases.size > 0 && (
                 <Button
                   variant="ghost"
                   size="sm"
                   onClick={() => setRuntimeSettingsOpen(!runtimeSettingsOpen)}
                   className={cn(
-                    "gap-2 text-xs",
-                    runtimeSettingsOpen && "bg-bg-accent-subtle text-fg-accent"
+                    "gap-2 text-xs opacity-60",
+                    runtimeSettingsOpen && "bg-bg-accent-subtle text-fg-accent opacity-100"
                   )}
-                  title="Knowledge Source Parameters"
+                  title="Source settings are read-only — agent uses KB defaults configured at creation time. Use KB Playground (/test) for runtime parameter tuning."
                 >
                   <Settings20Regular className="h-4 w-4" />
                   <span className="hidden sm:inline">Source Settings</span>
-                  {runtimeSettings.knowledgeSourceParams.length > 0 && (
-                    <span className="ml-1 text-[10px] px-1.5 py-0.5 rounded-full bg-accent text-fg-on-accent">
-                      {runtimeSettings.knowledgeSourceParams.length}
-                    </span>
-                  )}
+                  <span className="text-[9px] px-1 py-0.5 rounded bg-bg-secondary text-fg-subtle">read-only</span>
                 </Button>
               )}
             </div>
@@ -1921,7 +1905,10 @@ function AgentBuilderPageContent() {
         {runtimeSettingsOpen && (
           <div className="w-80 border-l border-stroke-divider bg-bg-card flex flex-col overflow-hidden">
             <div className="flex items-center justify-between p-4 border-b border-stroke-divider">
-              <h3 className="text-sm font-semibold">Source Settings</h3>
+              <div>
+                <h3 className="text-sm font-semibold">Source Settings</h3>
+                <p className="text-[10px] text-fg-subtle mt-0.5">Read-only — KB defaults apply via MCP</p>
+              </div>
               <button
                 onClick={() => setRuntimeSettingsOpen(false)}
                 className="p-1 hover:bg-bg-hover rounded text-fg-muted hover:text-fg-default transition-colors"
@@ -1929,7 +1916,7 @@ function AgentBuilderPageContent() {
                 <Dismiss20Regular className="h-4 w-4" />
               </button>
             </div>
-            <div className="flex-1 overflow-auto p-4">
+            <div className="flex-1 overflow-auto p-4 pointer-events-none opacity-60">
               <RuntimeSettingsPanel
                 compact
                 knowledgeSources={(() => {
