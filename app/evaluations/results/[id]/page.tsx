@@ -355,14 +355,29 @@ function ResultsContent() {
                           <p className="text-sm text-fg-default mt-1">{typeof item.datasource_item.query === 'string' ? item.datasource_item.query : JSON.stringify(item.datasource_item.query).slice(0, 300)}</p>
                         </div>
                       )}
-                      {(item.datasource_item?.response || item.datasource_item?.['sample.output_text']) && (
+                      {(item.datasource_item?.response || item.datasource_item?.['sample.output_text']) && (() => {
+                        const fullResp = (item.datasource_item.response || item.datasource_item['sample.output_text'] || '').toString()
+                        const isLong = fullResp.length > 300
+                        return (
                         <div>
-                          <span className="text-[10px] uppercase tracking-wider text-fg-subtle font-medium">Response</span>
-                          <p className="text-sm text-fg-muted mt-1 whitespace-pre-wrap">
-                            {(item.datasource_item.response || item.datasource_item['sample.output_text'] || '').toString().slice(0, 500)}
-                          </p>
+                          <div className="flex items-center justify-between">
+                            <span className="text-[10px] uppercase tracking-wider text-fg-subtle font-medium">Response</span>
+                            {isLong && <span className="text-[10px] text-fg-subtle">{fullResp.length} chars</span>}
+                          </div>
+                          <details className="mt-1">
+                            <summary className="text-xs text-accent cursor-pointer hover:underline font-medium">
+                              {isLong ? 'Click to expand full response' : 'View response'}
+                            </summary>
+                            <div className="text-sm text-fg-muted mt-2 whitespace-pre-wrap leading-relaxed">
+                              {fullResp}
+                            </div>
+                          </details>
+                          {!isLong && (
+                            <p className="text-sm text-fg-muted mt-1 whitespace-pre-wrap leading-relaxed">{fullResp}</p>
+                          )}
                         </div>
-                      )}
+                        )
+                      })()}
 
                       {/* Evaluator Scores — 3-state */}
                       <div>

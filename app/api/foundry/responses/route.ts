@@ -66,6 +66,7 @@ export async function POST(request: Request) {
     let previousResponseId: string | null = null
     let loopCount = 0
     const MAX_LOOPS = 5 // Safety limit to prevent infinite loops
+    const requestStartTime = Date.now()
 
     while (loopCount < MAX_LOOPS) {
       loopCount++
@@ -138,6 +139,12 @@ export async function POST(request: Request) {
         // Merge accumulated items from intermediate iterations with the final output
         const finalOutput = [...allOutputItems, ...(data.output || [])]
 
+        // DEBUG: Log all output item types to understand MCP response structure
+        console.log('[responses/v2] Output item types:', finalOutput.map((o: any) => `${o.type}${o.name ? ':' + o.name : ''}${o.server_label ? '@' + o.server_label : ''}`))
+        // Log full keys of each item to find hidden fields
+        for (const item of finalOutput) {
+          console.log(`[responses/v2] Item ${item.type} keys:`, Object.keys(item))
+        }
         // Parse MCP KB call outputs to extract source data for the frontend.
         // When the agent uses Foundry-native MCP KB tools, the mcp_call output
         // contains the synthesized answer + source blocks in a specific format:
@@ -146,11 +153,58 @@ export async function POST(request: Request) {
         // Ref: Phase 0 validation (Foundry IQ MCP response structure)
         for (const item of finalOutput) {
           if (item.type === 'mcp_call' && typeof item.output === 'string') {
+            console.log('[responses/v2] Found mcp_call item, output length:', item.output.length)
             try {
+              // Parse source references from the MCP KB output
               const sources = parseMcpKbSources(item.output)
               if (sources.length > 0) {
                 item._mcpSources = sources
+                console.log(`[responses/v2] Parsed ${sources.length} MCP sources`)
               }
+
+              // Extract retrieval metadata for the frontend's retrieval summary.
+              // The full activity timeline (modelQueryPlanning, searchIndex timing,
+              // agenticReasoning, modelAnswerSynthesis) is only available via the
+              // direct KB retrieve REST API (used by KB Playground). The MCP path
+              // does not surface it. However, we can extract:
+              const retrievalMeta: any = {}
+
+              // 1. Query decomposition from MCP call arguments
+              const args = typeof item.arguments === 'string'
+                ? (() => { try { return JSON.parse(item.arguments) } catch { return {} } })()
+                : (item.arguments || {})
+              if (args.queries && Array.isArray(args.queries)) {
+                retrievalMeta.queries = args.queries
+                retrievalMeta.queryCount = args.queries.length
+              }
+
+              // 2. Document count from "Retrieved N documents" prefix
+              const docCountMatch = item.output.match(/Retrieved (\d+) documents/)
+              if (docCountMatch) {
+                retrievalMeta.documentCount = parseInt(docCountMatch[1], 10)
+              }
+
+              // 3. Source count
+              retrievalMeta.sourceCount = sources.length
+
+              // 4. Server label (which KB)
+              retrievalMeta.serverLabel = item.server_label || ''
+              retrievalMeta.toolName = item.name || 'knowledge_base_retrieve'
+
+              // 5. Elapsed time (measured from request start to now)
+              retrievalMeta.elapsedMs = Date.now() - requestStartTime
+
+              // 6. Token usage (from the Foundry Responses API response)
+              if (data.usage) {
+                retrievalMeta.usage = {
+                  prompt_tokens: data.usage.prompt_tokens || data.usage.input_tokens || 0,
+                  completion_tokens: data.usage.completion_tokens || data.usage.output_tokens || 0,
+                  total_tokens: data.usage.total_tokens || 0,
+                }
+              }
+
+              item._mcpRetrievalMeta = retrievalMeta
+              console.log('[responses/v2] MCP retrieval meta:', JSON.stringify(retrievalMeta))
             } catch (parseErr) {
               console.warn('[responses/v2] MCP source parsing warning:', parseErr)
             }
@@ -159,6 +213,7 @@ export async function POST(request: Request) {
 
         data.output = finalOutput
         data._functionCallLoops = loopCount
+        data._elapsedMs = Date.now() - requestStartTime
 
         console.log('[responses/v2] Final response:', {
           status: data.status,
@@ -406,38 +461,93 @@ function parseMcpKbSources(output: string): any[] {
   for (let i = 0; i < markers.length; i++) {
     const start = markers[i].matchEnd
     const end = i + 1 < markers.length ? markers[i + 1].index : output.length
-    const block = output.slice(start, end).trim()
+    let block = output.slice(start, end).trim()
 
     if (!block) continue
 
     // Try to parse as JSON (source blocks contain { uid, blob_url, snippet })
+    // The JSON may contain escaped unicode (\u002B etc.), \r\n, etc.
+    let parsed: any = null
     try {
-      const parsed = JSON.parse(block)
+      parsed = JSON.parse(block)
+    } catch {
+      // Try cleaning: sometimes there's trailing text after the JSON
+      // Find the JSON object boundaries { ... }
+      const jsonStart = block.indexOf('{')
+      const jsonEnd = block.lastIndexOf('}')
+      if (jsonStart >= 0 && jsonEnd > jsonStart) {
+        try {
+          parsed = JSON.parse(block.slice(jsonStart, jsonEnd + 1))
+        } catch { /* still not valid JSON */ }
+      }
+    }
+
+    if (parsed && (parsed.uid || parsed.blob_url || parsed.snippet)) {
+      const blobUrl = parsed.blob_url || ''
+      // Detect source type: blob storage vs web
+      const isWeb = !blobUrl && parsed.snippet && (
+        parsed.snippet.includes('http://') || parsed.snippet.includes('https://')
+      )
+      const sourceType = blobUrl.includes('.blob.core.windows.net/') ? 'azureBlob'
+        : isWeb ? 'web'
+        : parsed.uid?.startsWith('web_') ? 'web'
+        : 'azureBlob'
+
+      const title = deriveTitle(blobUrl || parsed.uid || '')
+      // Clean snippet: remove \r\n, excessive whitespace
+      const snippet = (parsed.snippet || '')
+        .replace(/\\r\\n|\\n|\\r/g, ' ')
+        .replace(/\r\n|\n|\r/g, ' ')
+        .replace(/\s{2,}/g, ' ')
+        .trim()
+        .slice(0, 500)
+
+      // Extract URL from snippet if it's a web source (URLs often appear in snippet text)
+      let sourceUrl = blobUrl
+      if (!sourceUrl && parsed.snippet) {
+        const urlMatch = parsed.snippet.match(/https?:\/\/[^\s"'<>\\]+/)
+        if (urlMatch) sourceUrl = urlMatch[0]
+      }
+
       sources.push({
-        type: 'AzureSearchDoc',
+        type: sourceType,
         id: String(markers[i].sourceIdx),
         docKey: parsed.uid || '',
-        blobUrl: parsed.blob_url || '',
+        blobUrl: blobUrl,
+        url: sourceUrl,
+        // For web sources, also set webUrl for the Sources Panel
+        ...(sourceType === 'web' ? { webUrl: sourceUrl, title: title } : {}),
         sourceData: {
-          title: deriveTitle(parsed.blob_url || parsed.uid || ''),
-          snippet: parsed.snippet || '',
-          content: parsed.snippet || '',
+          title: title,
+          snippet: snippet,
+          content: snippet,
         },
       })
-    } catch {
-      // Not JSON — might be plain text source content
-      if (block.length > 10) {
-        sources.push({
-          type: 'AzureSearchDoc',
-          id: String(markers[i].sourceIdx),
-          docKey: '',
-          sourceData: {
-            title: `Source ${markers[i].sourceIdx + 1}`,
-            snippet: block.slice(0, 500),
-            content: block.slice(0, 500),
-          },
-        })
-      }
+    } else if (block.length > 20) {
+      // Not JSON — synthesized answer text (source 0 is typically the KB answer summary)
+      // Clean it up for display
+      const cleanBlock = block
+        .replace(/\r\n|\n|\r/g, ' ')
+        .replace(/\s{2,}/g, ' ')
+        .trim()
+        .slice(0, 500)
+
+      // Extract a meaningful title from the first sentence
+      const firstSentence = cleanBlock.split(/[.!?\n]/).filter(s => s.trim().length > 10)[0]?.trim()
+      const title = firstSentence
+        ? (firstSentence.length > 80 ? firstSentence.slice(0, 77) + '...' : firstSentence)
+        : `KB Synthesized Answer`
+
+      sources.push({
+        type: 'searchIndex',
+        id: String(markers[i].sourceIdx),
+        docKey: 'kb-synthesis',
+        sourceData: {
+          title: title,
+          snippet: cleanBlock,
+          content: cleanBlock,
+        },
+      })
     }
   }
 
@@ -450,15 +560,46 @@ function parseMcpKbSources(output: string): any[] {
 function deriveTitle(urlOrUid: string): string {
   if (!urlOrUid) return 'Unknown Source'
   try {
-    // Extract filename from blob URL
-    const parts = urlOrUid.split('/')
-    const filename = decodeURIComponent(parts[parts.length - 1] || '')
-    // Remove extension, replace separators with spaces
-    return filename
-      .replace(/\.[^.]+$/, '')
-      .replace(/[_+]/g, ' ')
-      .replace(/\s+/g, ' ')
-      .trim() || 'Unknown Source'
+    // If it's a blob URL, extract filename
+    if (urlOrUid.includes('.blob.core.windows.net/')) {
+      const parts = urlOrUid.split('/')
+      const filename = decodeURIComponent(parts[parts.length - 1] || '')
+      return filename
+        .replace(/\.[^.]+$/, '')
+        .replace(/[_+]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim() || 'Unknown Source'
+    }
+
+    // If it's a web URL, extract meaningful path segments
+    if (urlOrUid.startsWith('http')) {
+      const url = new URL(urlOrUid)
+      const pathParts = url.pathname.split('/').filter(Boolean)
+      if (pathParts.length > 0) {
+        const lastPart = decodeURIComponent(pathParts[pathParts.length - 1])
+        return lastPart
+          .replace(/[-_]/g, ' ')
+          .replace(/\.[^.]+$/, '')
+          .replace(/\s+/g, ' ')
+          .trim() || url.hostname
+      }
+      return url.hostname
+    }
+
+    // If it's a UID, try to extract meaningful text
+    // UIDs often have format: hash_base64encodedUrl
+    if (urlOrUid.includes('_aHR0')) {
+      // Base64 encoded URL in UID — extract the readable part before the hash
+      const parts = urlOrUid.split('_')
+      if (parts.length > 1) {
+        try {
+          const decoded = Buffer.from(parts[1], 'base64').toString('utf-8')
+          return deriveTitle(decoded)
+        } catch { /* ignore base64 decode failure */ }
+      }
+    }
+
+    return urlOrUid.slice(0, 60)
   } catch {
     return urlOrUid.slice(0, 60)
   }

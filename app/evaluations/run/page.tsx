@@ -143,13 +143,18 @@ export default function RunEvaluationPage() {
   })()
 
   const isEvaluatorDisabledByTools = (shortName: string): string | null => {
+    if (evalType !== 'agent-target' && evalType !== 'synthetic') return null
+    // tool_call_accuracy, tool_selection, tool_input_accuracy, tool_output_utilization
+    // always require tool_definitions in the test data — which agent-target mode
+    // does not provide. These evaluators error regardless of tool types.
+    // Per MS Learn: "Tool Call Accuracy | (query, response, tool_definitions)"
+    // Ref: https://learn.microsoft.com/en-us/azure/foundry/concepts/evaluation-evaluators/agent-evaluators
+    if (TOOL_DEF_EVALUATORS.has(shortName)) {
+      return 'Disabled — requires tool_definitions (not available in agent-target mode)'
+    }
     if (!hasOnlyLimitedSupportTools) return null
     if (!LIMITED_SUPPORT_EVALUATORS.has(shortName)) return null
-    if (evalType !== 'agent-target' && evalType !== 'synthetic') return null
     const toolList = Array.from(agentToolTypes).join(', ')
-    if (TOOL_DEF_EVALUATORS.has(shortName)) {
-      return `Disabled — requires tool_definitions and has limited support with ${toolList} tools`
-    }
     return `Disabled — limited support with ${toolList} tools`
   }
 

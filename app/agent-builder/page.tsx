@@ -441,6 +441,120 @@ function AgentBuilderPageContent() {
     }
   }
 
+  /**
+   * Export chat as JSONL dataset for evaluation.
+   * Per MS Learn, the dataset schema for evaluations is:
+   *   { query, response, context, ground_truth }
+   * - query: the user's question
+   * - response: the agent's answer
+   * - context: source snippets the agent used (extracted from MCP/KB sources)
+   * - ground_truth: left empty — requires human annotation
+   * Ref: https://learn.microsoft.com/en-us/azure/foundry/how-to/develop/cloud-evaluation#dataset-evaluation
+   */
+  const exportChatAsJsonl = () => {
+    const lines: string[] = []
+    for (let i = 0; i < messages.length; i++) {
+      const msg = messages[i]
+      if (msg.role !== 'user') continue
+      // Find the next assistant message
+      const nextMsg = messages[i + 1]
+      if (!nextMsg || nextMsg.role !== 'assistant') continue
+
+      const query = typeof msg.content === 'string' ? msg.content : ''
+      const response = typeof nextMsg.content === 'string' ? nextMsg.content : ''
+
+      // Extract context from references (source snippets the agent grounded on)
+      let context = ''
+      if (nextMsg.references && nextMsg.references.length > 0) {
+        context = nextMsg.references
+          .filter((ref: any) => ref.sourceData?.snippet || ref.sourceData?.content)
+          .map((ref: any) => {
+            const title = ref.sourceData?.title || ref.docKey || 'Source'
+            const snippet = ref.sourceData?.snippet || ref.sourceData?.content || ''
+            return `[${title}]: ${snippet}`
+          })
+          .slice(0, 5) // Top 5 sources
+          .join('\n')
+      }
+
+      lines.push(JSON.stringify({
+        query,
+        response,
+        context: context || '',
+        ground_truth: '', // Requires human annotation
+      }))
+    }
+
+    if (lines.length === 0) {
+      alert('No user-assistant message pairs found to export.')
+      return
+    }
+
+    const blob = new Blob([lines.join('\n')], { type: 'application/jsonl' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `conversation-${conversationId?.slice(-8) || 'export'}-dataset.jsonl`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  /**
+   * Export chat as a prettified Markdown file.
+   */
+  const exportChatAsMarkdown = () => {
+    const lines: string[] = [
+      `# Conversation Export`,
+      ``,
+      `**Agent:** ${agentName_saved || 'Unknown'}`,
+      `**Date:** ${new Date().toISOString().slice(0, 16).replace('T', ' ')}`,
+      `**Conversation ID:** ${conversationId || 'N/A'}`,
+      ``,
+      `---`,
+      ``,
+    ]
+
+    for (const msg of messages) {
+      if (msg.role === 'user') {
+        lines.push(`## 👤 User`)
+        lines.push(``)
+        lines.push(typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content))
+        lines.push(``)
+      } else if (msg.role === 'assistant') {
+        lines.push(`## 🤖 Assistant`)
+        lines.push(``)
+        lines.push(typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content))
+        if (msg.references && msg.references.length > 0) {
+          lines.push(``)
+          lines.push(`### Sources (${msg.references.length})`)
+          for (const ref of msg.references as any[]) {
+            const title = ref.sourceData?.title || ref.docKey || 'Source'
+            const url = ref.url || ref.blobUrl || ref.webUrl || ''
+            lines.push(`- **${title}**${url ? ` — [link](${url})` : ''}`)
+          }
+        }
+        if (msg.toolCalls && msg.toolCalls.length > 0) {
+          lines.push(``)
+          lines.push(`### Tools Used`)
+          for (const tc of msg.toolCalls) {
+            lines.push(`- \`${tc.name || tc.type}\`${tc.server_label ? ` (${tc.server_label})` : ''}`)
+          }
+        }
+        lines.push(``)
+        lines.push(`---`)
+        lines.push(``)
+      }
+    }
+
+    const blob = new Blob([lines.join('\n')], { type: 'text/markdown' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `conversation-${conversationId?.slice(-8) || 'export'}.md`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
   const switchToConversation = (newConversationId: string) => {
     setConversationId(newConversationId)
     setMessages([])
@@ -561,6 +675,8 @@ function AgentBuilderPageContent() {
     activity: KnowledgeBaseActivityRecord[]
     codeBlocks: Array<{ id: string; code: string; containerId?: string; status?: string }>
     generatedFiles: Array<{ containerId: string; fileId: string; filename: string; startIndex?: number; endIndex?: number }>
+    usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number }
+    mcpRetrievalMeta?: any
   } => {
     const output = responseData.output || []
     let text = ''
@@ -569,6 +685,7 @@ function AgentBuilderPageContent() {
     const activity: KnowledgeBaseActivityRecord[] = []
     const codeBlocks: Array<{ id: string; code: string; containerId?: string; status?: string }> = []
     const generatedFiles: Array<{ containerId: string; fileId: string; filename: string; startIndex?: number; endIndex?: number }> = []
+    let mcpRetrievalMeta: any = null
 
     for (const item of output) {
       if (item.type === 'message' && item.role === 'assistant') {
@@ -683,13 +800,64 @@ function AgentBuilderPageContent() {
         if (item._mcpSources && Array.isArray(item._mcpSources)) {
           for (const src of item._mcpSources) {
             references.push({
-              type: src.type || 'AzureSearchDoc',
+              type: src.type || 'azureBlob',
               id: String(references.length),
               activitySource: 0,
               docKey: src.docKey || '',
               blobUrl: src.blobUrl || '',
+              url: src.url || src.blobUrl || '',
               sourceData: src.sourceData || { title: 'Source', snippet: '' },
             } as any)
+          }
+        }
+
+        // Extract retrieval metadata and build synthetic activity entries
+        // for the Retrieval Journey component (query decomposition, doc count).
+        // The MCP path doesn't return the full activity array (modelQueryPlanning,
+        // per-source timing, agenticReasoning, modelAnswerSynthesis) — only the
+        // query decomposition and doc count are available.
+        if (item._mcpRetrievalMeta) {
+          const meta = item._mcpRetrievalMeta
+          mcpRetrievalMeta = meta
+
+          // Synthetic activity: query planning with tokens and timing
+          if (meta.queries && meta.queries.length > 0) {
+            activity.push({
+              type: 'modelQueryPlanning',
+              id: activity.length,
+              inputTokens: meta.usage?.prompt_tokens || 0,
+              outputTokens: meta.usage?.completion_tokens || 0,
+              elapsedMs: meta.elapsedMs || 0,
+            } as any)
+
+            // One searchIndex entry per sub-query so each appears in the journey
+            const docsPerQuery = meta.documentCount
+              ? Math.ceil(meta.documentCount / meta.queries.length)
+              : 0
+            const timePerQuery = meta.elapsedMs
+              ? Math.round(meta.elapsedMs / meta.queries.length)
+              : 0
+            for (const query of meta.queries) {
+              activity.push({
+                type: 'searchIndex',
+                id: activity.length,
+                knowledgeSourceName: meta.serverLabel || 'Knowledge Base',
+                count: docsPerQuery,
+                elapsedMs: timePerQuery,
+                searchIndexArguments: { search: query },
+              } as any)
+            }
+
+            // Synthetic reasoning step with total token usage
+            if (meta.usage) {
+              activity.push({
+                type: 'agenticReasoning',
+                id: activity.length,
+                reasoningTokens: meta.usage.total_tokens || 0,
+                retrievalReasoningEffort: { kind: 'mcp' },
+                elapsedMs: meta.elapsedMs || 0,
+              } as any)
+            }
           }
         }
       } else if (item.type === 'mcp_call_output') {
@@ -719,7 +887,7 @@ function AgentBuilderPageContent() {
       text = 'No response content received.'
     }
 
-    return { text, references, mcpCalls, activity, codeBlocks, generatedFiles }
+    return { text, references, mcpCalls, activity, codeBlocks, generatedFiles, usage: responseData.usage, mcpRetrievalMeta }
   }
 
   const updateAgentDetails = async (): Promise<boolean> => {
@@ -825,64 +993,56 @@ function AgentBuilderPageContent() {
         return (
           <div className="space-y-6">
             <h2 className="text-lg font-semibold mb-4">Tools</h2>
-            <div className="space-y-3 max-w-2xl">
-              <label className="flex items-start gap-3 p-4 border border-stroke-card rounded-lg cursor-pointer hover:bg-bg-tertiary">
+            <div className="space-y-3 max-w-2xl\">
+              <label className="flex items-start gap-3 p-4 border border-stroke-card rounded-lg cursor-pointer hover:bg-bg-tertiary\">
                 <input
                   type="checkbox"
                   checked={enabledTools.codeInterpreter}
                   onChange={(e) => setEnabledTools({...enabledTools, codeInterpreter: e.target.checked})}
-                  className="mt-0.5 h-4 w-4"
+                  className="mt-0.5 h-4 w-4\"
                 />
-                <div className="flex-1">
-                  <div className="font-medium">Code Interpreter</div>
-                  <div className="text-sm text-fg-muted mt-1">Execute Python code in a Jupyter notebook environment</div>
+                <div className="flex-1\">
+                  <div className="font-medium\">Code Interpreter</div>
+                  <div className="text-sm text-fg-muted mt-1\">Execute Python code in a Jupyter notebook environment</div>
                 </div>
               </label>
 
-              <label className="flex items-start gap-3 p-4 border border-stroke-card rounded-lg cursor-pointer hover:bg-bg-tertiary">
-                <input
-                  type="checkbox"
-                  checked={enabledTools.fileSearch}
-                  onChange={(e) => setEnabledTools({...enabledTools, fileSearch: e.target.checked})}
-                  className="mt-0.5 h-4 w-4"
-                />
-                <div className="flex-1">
-                  <div className="font-medium">File Search</div>
-                  <div className="text-sm text-fg-muted mt-1">Search through uploaded files and documents</div>
-                </div>
-              </label>
-
-              <label className="flex items-start gap-3 p-4 border border-stroke-card rounded-lg cursor-pointer hover:bg-bg-tertiary">
-                <input
-                  type="checkbox"
-                  checked={enabledTools.webSearch}
-                  onChange={(e) => setEnabledTools({...enabledTools, webSearch: e.target.checked})}
-                  className="mt-0.5 h-4 w-4"
-                />
-                <div className="flex-1">
-                  <div className="font-medium">Web Search</div>
-                  <div className="text-sm text-fg-muted mt-1">Search the web for real-time information</div>
-                </div>
-              </label>
-
-              <label className="flex items-start gap-3 p-4 border border-stroke-card rounded-lg cursor-pointer hover:bg-bg-tertiary">
+              <label className="flex items-start gap-3 p-4 border border-stroke-card rounded-lg cursor-pointer hover:bg-bg-tertiary\">
                 <input
                   type="checkbox"
                   checked={enabledTools.airportOps}
                   onChange={(e) => setEnabledTools({...enabledTools, airportOps: e.target.checked})}
-                  className="mt-0.5 h-4 w-4"
+                  className="mt-0.5 h-4 w-4\"
                 />
-                <div className="flex-1">
-                  <div className="flex items-center gap-2">
-                    <div className="font-medium">Airport Operations (MCP)</div>
-                    <Airplane20Regular className="text-fg-muted" />
+                <div className="flex-1\">
+                  <div className="flex items-center gap-2\">
+                    <div className="font-medium\">Airport Operations (MCP)</div>
+                    <Airplane20Regular className="text-fg-muted\" />
                   </div>
-                  <div className="text-sm text-fg-muted mt-1">
+                  <div className="text-sm text-fg-muted mt-1\">
                     Connect to the Airport Operations MCP server for real-time KPIs, flight data, delays, passenger stats, and more (40 tools)
                   </div>
-                  <div className="text-xs text-fg-muted mt-1 font-mono opacity-60">
+                  <div className="text-xs text-fg-muted mt-1 font-mono opacity-60\">
                     Remote MCP &middot; Streamable HTTP &middot; airport-ops-mcp
                   </div>
+                </div>
+              </label>
+
+              <label className="flex items-start gap-3 p-4 border border-stroke-card rounded-lg opacity-40 cursor-not-allowed\">
+                <input type="checkbox" checked={false} disabled className="mt-0.5 h-4 w-4\" />
+                <div className="flex-1\">
+                  <div className="font-medium\">File Search</div>
+                  <div className="text-sm text-fg-muted mt-1\">Search through uploaded files and documents</div>
+                  <div className="text-[10px] text-fg-subtle mt-1\">Not available in this demo</div>
+                </div>
+              </label>
+
+              <label className="flex items-start gap-3 p-4 border border-stroke-card rounded-lg opacity-40 cursor-not-allowed\">
+                <input type="checkbox" checked={false} disabled className="mt-0.5 h-4 w-4\" />
+                <div className="flex-1\">
+                  <div className="font-medium\">Web Search</div>
+                  <div className="text-sm text-fg-muted mt-1\">Search the web for real-time information</div>
+                  <div className="text-[10px] text-fg-subtle mt-1\">Not available in this demo</div>
                 </div>
               </label>
             </div>
@@ -1442,6 +1602,43 @@ function AgentBuilderPageContent() {
                       >
                         i
                       </button>
+                      {/* Export chat button */}
+                      {messages.length > 1 && (
+                        <div className="relative">
+                          <button
+                            onClick={() => {
+                              const el = document.getElementById('export-menu')
+                              if (el) el.classList.toggle('hidden')
+                            }}
+                            className="h-7 w-7 rounded-full flex items-center justify-center text-xs border bg-bg-secondary text-fg-muted border-stroke-card hover:border-accent hover:text-accent transition-colors"
+                            title="Export Conversation"
+                          >
+                            ↓
+                          </button>
+                          <div id="export-menu" className="hidden absolute top-full right-0 mt-1 z-50 w-52 rounded-xl border border-stroke-divider bg-bg-card shadow-xl py-1">
+                            <button
+                              onClick={() => {
+                                exportChatAsJsonl()
+                                document.getElementById('export-menu')?.classList.add('hidden')
+                              }}
+                              className="w-full text-left px-3 py-2 text-xs hover:bg-bg-secondary transition-colors"
+                            >
+                              <div className="font-medium text-fg-default">Dataset (JSONL)</div>
+                              <div className="text-[10px] text-fg-muted">For evaluation — query, response, context</div>
+                            </button>
+                            <button
+                              onClick={() => {
+                                exportChatAsMarkdown()
+                                document.getElementById('export-menu')?.classList.add('hidden')
+                              }}
+                              className="w-full text-left px-3 py-2 text-xs hover:bg-bg-secondary transition-colors"
+                            >
+                              <div className="font-medium text-fg-default">Prettified (Markdown)</div>
+                              <div className="text-[10px] text-fg-muted">Formatted conversation log</div>
+                            </button>
+                          </div>
+                        </div>
+                      )}
                       {/* Agent info popover */}
                       {showAgentInfo && (
                         <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 z-50 w-80 max-h-[70vh] overflow-y-auto rounded-xl border border-stroke-divider bg-bg-card shadow-2xl p-4 space-y-3">

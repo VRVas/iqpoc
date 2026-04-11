@@ -72,7 +72,7 @@ export function Tooltip({ content, children, side = 'top', className }: TooltipP
         onMouseLeave={() => setIsVisible(false)}
         onFocus={() => setIsVisible(true)}
         onBlur={() => setIsVisible(false)}
-        className="inline-block"
+        className="inline-flex w-full"
       >
         {children}
       </div>
