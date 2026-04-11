@@ -9,8 +9,8 @@ export const createKnowledgeBaseSchema = z.object({
     .regex(/^[a-zA-Z0-9\s\-_]+$/, 'Name can only contain letters, numbers, spaces, hyphens, and underscores'),
   description: z
     .string()
-    .max(500, 'Description must be 500 characters or less')
-    .optional(),
+    .min(1, 'Description is required — it becomes the tool definition used during agent evaluations')
+    .max(500, 'Description must be 500 characters or less'),
   modelDeployment: z
     .string()
     .min(1, 'Model selection is required'),

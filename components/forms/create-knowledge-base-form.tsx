@@ -15,6 +15,7 @@ import { Tooltip } from '@/components/ui/tooltip'
 import { useToast } from '@/components/ui/toast'
 import { cn } from '@/lib/utils'
 import { createKnowledgeBase } from '@/lib/api'
+import { generateKbToolDefinition, setToolDefinition } from '@/lib/tool-definitions-store'
 import { createKnowledgeBaseSchema, CreateKnowledgeBaseFormData } from '@/lib/validations'
 import { getSourceKindLabel } from '@/lib/sourceKinds'
 import { MODEL_DEPLOYMENTS } from '@/lib/modelOptions'
@@ -124,6 +125,20 @@ export function CreateKnowledgeBaseForm({
 
       await createKnowledgeBase(payload)
 
+      // Auto-generate and store tool definition for evaluations
+      // The KB name + description form the tool definition per our design
+      const kbKey = `kb_${data.name.trim().replace(/[^a-zA-Z0-9_]/g, '_')}`
+      const toolDef = generateKbToolDefinition(data.name.trim(), data.description?.trim() || '')
+      setToolDefinition(kbKey, toolDef)
+      // Also persist to server-side config file
+      try {
+        await fetch('/api/tool-definitions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ key: kbKey, definition: toolDef }),
+        })
+      } catch { /* non-critical — localStorage is the primary store */ }
+
       if (onSubmit) {
         await onSubmit(data)
       }
@@ -193,8 +208,8 @@ export function CreateKnowledgeBaseForm({
 
             <FormField name="description" error={errors.description?.message}>
               <div className="flex items-center gap-2">
-                <FormLabel>Description</FormLabel>
-                <Tooltip content="Explain what this knowledge base covers so other builders know when to use it.">
+                <FormLabel>Description <span className="text-red-500">*</span></FormLabel>
+                <Tooltip content="A comprehensive description helps AI evaluators assess tool usage accuracy. This becomes the tool definition for evaluations.">
                   <Info20Regular className="h-4 w-4 text-fg-muted cursor-help" />
                 </Tooltip>
               </div>
@@ -207,7 +222,7 @@ export function CreateKnowledgeBaseForm({
                 />
               </FormControl>
               <FormDescription>
-                Optional description to help teammates understand the scope.
+                Required — this description is used as the tool definition during agent evaluations (tool_call_accuracy, tool_selection, etc.).
               </FormDescription>
               <FormMessage />
             </FormField>

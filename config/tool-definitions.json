@@ -1,0 +1,42 @@
+{
+  "code_interpreter": {
+    "type": "function",
+    "function": {
+      "name": "code_interpreter",
+      "description": "Execute Python code in a Jupyter notebook environment to analyze data, create visualizations with Plotly, compute metrics, and generate files.",
+      "parameters": {
+        "type": "object",
+        "properties": {}
+      }
+    }
+  },
+  "airport_ops": {
+    "type": "function",
+    "function": {
+      "name": "airport_ops",
+      "description": "Connect to the Airport Operations MCP server for real-time KPIs, flight data, delays, passenger stats, gate assignments, runway usage, turnaround metrics, and baggage handling performance at Hamad International Airport (DOH). Provides 40+ operational tools.",
+      "parameters": {
+        "type": "object",
+        "properties": {}
+      }
+    }
+  },
+  "kb_test41miniweb": {
+    "type": "function",
+    "function": {
+      "name": "knowledge_base_retrieve",
+      "description": "Search the test41miniweb knowledge base for relevant documents and information about Qatar Airways policies, procedures, baggage, refunds, loyalty programs, animal transport, check-in, visa/transit, and onboard services.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "queries": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Search queries to find relevant information in the knowledge base"
+          }
+        },
+        "required": ["queries"]
+      }
+    }
+  }
+}
