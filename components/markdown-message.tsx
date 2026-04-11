@@ -134,6 +134,16 @@ function preprocessContent(
   // Convert citation markers [ref_id:N] to markdown links
   processed = processed.replace(/\[ref_id:(\d+)\]/g, '[📎$1](cite:$1)')
 
+  // Auto-convert plain image URLs to markdown image syntax
+  // Matches URLs ending in common image extensions that aren't already in markdown ![]()/[]() syntax
+  processed = processed.replace(
+    /(?<!\[.*?\]\()(?<!!)\b(https?:\/\/[^\s"'<>]+\.(?:jpg|jpeg|png|gif|svg|webp)(?:\?[^\s"'<>]*)?)/gi,
+    (match, url) => {
+      // Don't convert if it's already inside a markdown link or image
+      return `\n\n![Image](${url})\n\n`
+    }
+  )
+
   return processed
 }
 
