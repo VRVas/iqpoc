@@ -60,6 +60,7 @@ class ResponseIdsRequest(BaseModel):
     response_ids: list[str]
     evaluators: list[str] = Field(default_factory=lambda: ["coherence", "violence"])
     model_deployment: Optional[str] = None
+    tool_definitions: Optional[list[dict]] = None  # OpenAI function-calling schema
 
 
 class SyntheticEvalRequest(BaseModel):

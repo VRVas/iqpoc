@@ -317,8 +317,8 @@ def build_testing_criteria(
         # Add tool_definitions to data mapping for tool evaluators when available
         # Per MS Learn: tool_call_accuracy, tool_selection, tool_input_accuracy,
         # tool_output_utilization all require tool_definitions field
-        if has_tool_definitions and reg.get(\"requires_tool_definitions\"):
-            entry[\"data_mapping\"][\"tool_definitions\"] = \"{{item.tool_definitions}}\"
+        if has_tool_definitions and reg.get("requires_tool_definitions"):
+            entry["data_mapping"]["tool_definitions"] = "{{item.tool_definitions}}"
         # Model deployment for AI-assisted evaluators
         if reg["requires_model"]:
             entry["initialization_parameters"] = {"deployment_name": model_deployment}
@@ -363,7 +363,12 @@ def create_eval_and_run_dataset(
         },
     )
 
-    testing_criteria = build_testing_criteria(evaluator_names, model_deployment, eval_mode="dataset")
+    # Check if items contain tool_definitions (injected by frontend)
+    has_tool_defs = "tool_definitions" in items[0]
+    testing_criteria = build_testing_criteria(
+        evaluator_names, model_deployment, eval_mode="dataset",
+        has_tool_definitions=has_tool_defs,
+    )
 
     eval_obj = client.evals.create(
         name=name,
