@@ -312,19 +312,22 @@ export default function RunEvaluationPage() {
         <h3 className="text-sm font-semibold text-fg-default mb-3">Evaluation Type</h3>
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
           {([
-            { value: 'agent-target' as EvalType, label: 'Agent Target', desc: 'Send queries to agent, eval responses', icon: '🎯' },
-            { value: 'response-ids' as EvalType, label: 'Response IDs', desc: 'Evaluate stored response IDs', icon: '📋' },
-            { value: 'dataset' as EvalType, label: 'Dataset', desc: 'Eval pre-computed query/response pairs', icon: '📊' },
-            { value: 'synthetic' as EvalType, label: 'Synthetic', desc: 'Auto-generate queries + eval (preview)', icon: '🧪' },
+            { value: 'agent-target' as EvalType, label: 'Agent Target', desc: 'Send queries to agent, eval responses', icon: '🎯', disabled: false },
+            { value: 'response-ids' as EvalType, label: 'Response IDs', desc: 'Under construction — response storage not yet connected', icon: '📋', disabled: true },
+            { value: 'dataset' as EvalType, label: 'Dataset', desc: 'Eval pre-computed query/response pairs', icon: '📊', disabled: false },
+            { value: 'synthetic' as EvalType, label: 'Synthetic', desc: 'Auto-generate queries + eval (preview)', icon: '🧪', disabled: false },
           ]).map(t => (
             <button
               key={t.value}
-              onClick={() => setEvalType(t.value)}
+              onClick={() => !t.disabled && setEvalType(t.value)}
+              disabled={t.disabled}
               className={cn(
                 'rounded-xl border p-4 text-left transition-all',
-                evalType === t.value
-                  ? 'border-accent bg-accent/5 ring-1 ring-accent/30'
-                  : 'border-stroke-card hover:border-stroke-accent'
+                t.disabled
+                  ? 'border-stroke-card opacity-40 cursor-not-allowed'
+                  : evalType === t.value
+                    ? 'border-accent bg-accent/5 ring-1 ring-accent/30'
+                    : 'border-stroke-card hover:border-stroke-accent'
               )}
             >
               <span className="text-lg">{t.icon}</span>
