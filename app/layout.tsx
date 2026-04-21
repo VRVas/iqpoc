@@ -5,6 +5,7 @@ import { AppShell } from '@/components/app-shell'
 import { ThemeProvider } from '@/components/theme-provider'
 import { ToastProvider } from '@/components/ui/toast'
 import { ViewModeProvider } from '@/lib/view-mode'
+import { GeneralAccessGate } from '@/components/general-access-gate'
 import NextTopLoader from 'nextjs-toploader'
 
 const spaceGrotesk = Space_Grotesk({
@@ -40,11 +41,13 @@ export default function RootLayout({
           enableSystem={false}
           disableTransitionOnChange
         >
-          <ViewModeProvider>
-            <ToastProvider>
-              <AppShell>{children}</AppShell>
-            </ToastProvider>
-          </ViewModeProvider>
+          <GeneralAccessGate>
+            <ViewModeProvider>
+              <ToastProvider>
+                <AppShell>{children}</AppShell>
+              </ToastProvider>
+            </ViewModeProvider>
+          </GeneralAccessGate>
         </ThemeProvider>
       </body>
     </html>
