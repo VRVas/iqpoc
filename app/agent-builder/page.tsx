@@ -203,13 +203,20 @@ function AgentBuilderPageContent() {
         const tools = latestDef.tools || []
         const matchedKBs = new Set<string>()
 
-        // Check MCP tools (legacy approach)
+        // Check MCP tools — extract KB name from server_url or server_label
         const mcpTools = tools.filter((t: any) => t.type === 'mcp')
         for (const mcp of mcpTools) {
+          // Try extracting from server_url first
           const serverUrl = mcp.server_url || ''
-          const match = serverUrl.match(/\/knowledgebases\/([^/]+)\/mcp/)
-          if (match) {
-            matchedKBs.add(match[1])
+          const urlMatch = serverUrl.match(/\/knowledgebases\/([^/]+)\/mcp/)
+          if (urlMatch) {
+            matchedKBs.add(urlMatch[1])
+            continue
+          }
+          // Fallback: extract from server_label (format: kb_{name})
+          const label = mcp.server_label || ''
+          if (label.startsWith('kb_')) {
+            matchedKBs.add(label.replace(/^kb_/, '').replace(/_/g, ''))
           }
         }
 

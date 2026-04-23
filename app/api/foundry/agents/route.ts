@@ -26,6 +26,7 @@ export async function POST(request: Request) {
     // Per MS Learn: each KB gets a RemoteTool project connection + MCPTool
     // Ref: https://learn.microsoft.com/en-us/azure/foundry/agents/how-to/foundry-iq-connect#create-an-agent-with-the-mcp-tool
     const knowledgeBases: string[] = body.knowledgeBases || []
+    const failedKBs: string[] = []
     for (const kbName of knowledgeBases) {
       try {
         const connectionName = await ensureMcpConnection(kbName)
@@ -33,8 +34,15 @@ export async function POST(request: Request) {
         console.log(`[agents/v2] Added MCP KB tool for "${kbName}" (connection: ${connectionName})`)
       } catch (err) {
         console.error(`[agents/v2] Failed to create MCP connection for KB "${kbName}":`, err)
-        // Continue with other KBs — don't block agent creation
+        failedKBs.push(kbName)
       }
+    }
+    if (failedKBs.length > 0 && failedKBs.length === knowledgeBases.length) {
+      // All KB connections failed — don't create agent without any KB tools
+      return NextResponse.json(
+        { error: `Failed to create MCP connections for knowledge bases: ${failedKBs.join(', ')}. Agent not created.` },
+        { status: 502 }
+      )
     }
 
     // Add optional tools
