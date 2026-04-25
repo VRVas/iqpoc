@@ -221,6 +221,8 @@ function QuickCreateKnowledgeSourcePageContent() {
   const [containersFailed, setContainersFailed] = useState(false)
   const [folders, setFolders] = useState<string[]>([])
   const [foldersLoading, setFoldersLoading] = useState(false)
+  const [overwriteFiles, setOverwriteFiles] = useState<string[]>([])
+  const [showOverwriteDialog, setShowOverwriteDialog] = useState(false)
 
   useEffect(() => {
     if (selectedType) {
@@ -292,8 +294,32 @@ function QuickCreateKnowledgeSourcePageContent() {
     setConfig(prev => ({ ...prev, folderPath: name }))
   }
 
+  const checkAndCreate = async () => {
+    if (!validateConfig() || !selectedType) return
+    // Pre-upload collision check for upload tab + default storage
+    if (selectedType === 'azureBlob' && blobTab === 'upload' && files.length > 0 && useDefaultStorage && config.containerName) {
+      try {
+        const prefix = config.folderPath ? `${config.folderPath}/` : ''
+        const resp = await fetch(`/api/storage/blobs?container=${encodeURIComponent(config.containerName)}&prefix=${encodeURIComponent(prefix)}`)
+        const data = await resp.json()
+        const existingNames = (data.blobs || []).map((b: any) => {
+          const parts = b.name.split('/')
+          return parts[parts.length - 1]
+        })
+        const collisions = files.filter(f => existingNames.includes(f.name)).map(f => f.name)
+        if (collisions.length > 0) {
+          setOverwriteFiles(collisions)
+          setShowOverwriteDialog(true)
+          return
+        }
+      } catch { /* if check fails, proceed anyway */ }
+    }
+    await handleCreate()
+  }
+
   const handleCreate = async () => {
     if (!validateConfig() || !selectedType) return
+    setShowOverwriteDialog(false)
     setCreating(true)
     try {
       // Upload files (upload tab + default storage only)
@@ -511,7 +537,7 @@ function QuickCreateKnowledgeSourcePageContent() {
 
             <div className="flex justify-end gap-3">
               <Button variant="secondary" onClick={() => setStep('select')}>Back</Button>
-              <Button onClick={handleCreate} disabled={creating || !validateConfig()}>
+              <Button onClick={checkAndCreate} disabled={creating || !validateConfig()}>
                 {creating ? (
                   <><svg className="h-4 w-4 animate-spin mr-2" viewBox="0 0 24 24" fill="none"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" /></svg> Creating...</>
                 ) : 'Create Knowledge Source'}
@@ -520,6 +546,30 @@ function QuickCreateKnowledgeSourcePageContent() {
           </div>
         )}
       </div>
+
+      {/* Overwrite confirmation dialog */}
+      {showOverwriteDialog && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm">
+          <div className="bg-bg-card border border-stroke-divider rounded-2xl shadow-2xl p-6 w-full max-w-md mx-4">
+            <h3 className="text-base font-semibold text-fg-default mb-2">Files already exist</h3>
+            <p className="text-sm text-fg-muted mb-3">
+              The following {overwriteFiles.length === 1 ? 'file' : `${overwriteFiles.length} files`} already {overwriteFiles.length === 1 ? 'exists' : 'exist'} in the target location and will be overwritten:
+            </p>
+            <div className="max-h-40 overflow-y-auto mb-4 space-y-1">
+              {overwriteFiles.map(name => (
+                <div key={name} className="flex items-center gap-2 px-3 py-1.5 bg-yellow-500/10 border border-yellow-500/20 rounded-lg text-sm">
+                  <svg className="h-4 w-4 text-yellow-500 shrink-0" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126z" /><path strokeLinecap="round" strokeLinejoin="round" d="M12 15.75h.007v.008H12v-.008z" /></svg>
+                  <span className="truncate">{name}</span>
+                </div>
+              ))}
+            </div>
+            <div className="flex gap-3 justify-end">
+              <Button variant="secondary" onClick={() => setShowOverwriteDialog(false)}>Cancel</Button>
+              <Button onClick={handleCreate}>Overwrite & Continue</Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
