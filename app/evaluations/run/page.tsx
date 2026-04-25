@@ -714,7 +714,7 @@ export default function RunEvaluationPage() {
           <Button
             variant="outline"
             size="sm"
-            onClick={() => router.push(`/evaluations/results/${result.run_id}?eval_id=${result.eval_id}&edit=admin`)}
+            onClick={() => router.push(`/evaluations/results/${result.run_id}?eval_id=${result.eval_id}&agent=${encodeURIComponent(selectedAgent)}&mode=${encodeURIComponent(evalType)}&edit=admin`)}
           >
             View Results <ArrowRight20Regular className="h-4 w-4 ml-1" />
           </Button>

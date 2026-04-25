@@ -162,6 +162,47 @@ app.post('/upload', upload.array('files', 50), async (req, res) => {
   }
 })
 
+// ---------- AI Insights K:V (blob-backed) ----------
+
+const INSIGHTS_CONTAINER = 'ai-insights'
+
+// GET /insights/:key — read a saved insight
+app.get('/insights/:key', async (req, res) => {
+  try {
+    const client = getStorageClient()
+    const containerClient = client.getContainerClient(INSIGHTS_CONTAINER)
+    const blobClient = containerClient.getBlobClient(`${req.params.key}.json`)
+    const exists = await blobClient.exists()
+    if (!exists) return res.status(404).json({ error: 'Not found' })
+    const dl = await blobClient.download(0)
+    const chunks = []
+    for await (const chunk of dl.readableStreamBody) chunks.push(chunk)
+    const data = JSON.parse(Buffer.concat(chunks).toString())
+    res.json(data)
+  } catch (err) {
+    console.error('Read insight error:', err.message)
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// PUT /insights/:key — save an insight
+app.put('/insights/:key', async (req, res) => {
+  try {
+    const client = getStorageClient()
+    const containerClient = client.getContainerClient(INSIGHTS_CONTAINER)
+    await containerClient.createIfNotExists()
+    const blockBlobClient = containerClient.getBlockBlobClient(`${req.params.key}.json`)
+    const body = JSON.stringify(req.body)
+    await blockBlobClient.upload(body, body.length, {
+      blobHTTPHeaders: { blobContentType: 'application/json' },
+    })
+    res.json({ saved: true, key: req.params.key })
+  } catch (err) {
+    console.error('Save insight error:', err.message)
+    res.status(500).json({ error: err.message })
+  }
+})
+
 // ---------- Start ----------
 
 const PORT = process.env.PORT || 3000

@@ -175,6 +175,21 @@ class TokenManager {
       throw new Error(`Failed to get ARM token: ${error.message}`)
     }
   }
+
+  /**
+   * Get a Cognitive Services token (scope: https://cognitiveservices.azure.com/.default).
+   * Used for Azure OpenAI Chat Completions when key auth is disabled.
+   */
+  public async getCognitiveServicesToken(): Promise<string> {
+    try {
+      if (!this.credential) throw new Error('Azure credential not initialized')
+      const tokenResponse = await this.credential.getToken('https://cognitiveservices.azure.com/.default')
+      if (!tokenResponse) throw new Error('Failed to get CognitiveServices token')
+      return tokenResponse.token
+    } catch (error: any) {
+      throw new Error(`Failed to get CognitiveServices token: ${error.message}`)
+    }
+  }
 }
 
 // Lazy singleton — only instantiated on first actual use (not at import/build time)
@@ -204,4 +219,12 @@ export async function getFoundryBearerToken(): Promise<string> {
  */
 export async function getArmBearerToken(): Promise<string> {
   return getTokenManager().getArmToken()
+}
+
+/**
+ * Get a Cognitive Services bearer token for Azure OpenAI calls
+ * when key-based auth is disabled (MCAPS policy).
+ */
+export async function getCognitiveServicesToken(): Promise<string> {
+  return getTokenManager().getCognitiveServicesToken()
 }

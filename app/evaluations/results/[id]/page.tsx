@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, Suspense } from 'react'
+import { useState, useEffect, useRef, useCallback, Suspense } from 'react'
 import { useSearchParams, useParams, useRouter } from 'next/navigation'
 import {
   ArrowLeft20Regular,
@@ -93,6 +93,23 @@ function sortPerEvaluator(evals: any[], items: any[]): any[] {
 }
 
 // ---------------------------------------------------------------------------
+// Markdown renderer for analysis card
+// ---------------------------------------------------------------------------
+
+function renderMarkdown(md: string): string {
+  let html = md
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/^### (.+)$/gm, '<h3 class="text-base font-semibold mt-4 mb-2">$1</h3>')
+    .replace(/^## (.+)$/gm, '<h2 class="text-lg font-semibold mt-5 mb-2">$1</h2>')
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/\*(.+?)\*/g, '<em>$1</em>')
+    .replace(/`([^`]+)`/g, '<code class="text-xs bg-purple-100 dark:bg-purple-900/40 px-1 py-0.5 rounded">$1</code>')
+    .replace(/^- (.+)$/gm, '<li class="ml-4 list-disc">$1</li>')
+    .replace(/\n\n/g, '<br/><br/>')
+  return html
+}
+
+// ---------------------------------------------------------------------------
 // Main Component
 // ---------------------------------------------------------------------------
 
@@ -102,6 +119,8 @@ function ResultsContent() {
   const router = useRouter()
   const runId = params.id as string
   const evalId = searchParams.get('eval_id') || ''
+  const agentName = searchParams.get('agent') || ''
+  const evalMode = searchParams.get('mode') || ''
 
   const [result, setResult] = useState<any>(null)
   const [loading, setLoading] = useState(true)
@@ -109,6 +128,95 @@ function ResultsContent() {
   const [expandedItem, setExpandedItem] = useState<string | null>(null)
   const [currentPage, setCurrentPage] = useState(1)
   const ITEMS_PER_PAGE = 10
+
+  // AI Analysis state
+  const [analysis, setAnalysis] = useState<string>('')
+  const [analysisLoading, setAnalysisLoading] = useState(false)
+  const [analysisOpen, setAnalysisOpen] = useState(false)
+  const [analysisSaved, setAnalysisSaved] = useState(false)
+  const analysisKey = `${evalId}_${runId}`
+  const analysisRef = useRef<HTMLDivElement>(null)
+
+  // Load saved analysis on mount
+  useEffect(() => {
+    if (!evalId || !runId) return
+    fetch(`/api/eval/insights/${encodeURIComponent(analysisKey)}`)
+      .then(r => { if (r.ok) return r.json(); throw new Error('not found') })
+      .then(data => {
+        if (data.analysis) {
+          setAnalysis(data.analysis)
+          setAnalysisOpen(true)
+          setAnalysisSaved(true)
+        }
+      })
+      .catch(() => { /* no saved analysis */ })
+  }, [evalId, runId])
+
+  const generateAnalysis = useCallback(async () => {
+    if (!result) return
+    setAnalysisLoading(true)
+    setAnalysis('')
+    setAnalysisOpen(true)
+    setAnalysisSaved(false)
+
+    try {
+      const resp = await fetch('/api/eval/analysis', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          agentName,
+          evalMode: evalMode || result.type || 'evaluation',
+          evalResults: {
+            result_counts: result.result_counts,
+            per_evaluator: result.per_evaluator,
+            items: result.items,
+          },
+        }),
+      })
+
+      if (!resp.ok) throw new Error(`Analysis failed: ${resp.status}`)
+
+      const reader = resp.body!.getReader()
+      const decoder = new TextDecoder()
+      let fullText = ''
+      let buffer = ''
+
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        buffer += decoder.decode(value, { stream: true })
+        const lines = buffer.split('\n')
+        buffer = lines.pop() || ''
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue
+          const data = line.slice(6).trim()
+          if (data === '[DONE]') continue
+          try {
+            const parsed = JSON.parse(data)
+            if (parsed.content) {
+              fullText += parsed.content
+              setAnalysis(fullText)
+            }
+          } catch { /* skip */ }
+        }
+      }
+
+      // Auto-save to blob
+      if (fullText) {
+        await fetch(`/api/eval/insights/${encodeURIComponent(analysisKey)}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ analysis: fullText, agentName, createdAt: new Date().toISOString() }),
+        })
+        setAnalysisSaved(true)
+      }
+    } catch (err) {
+      console.error('Analysis error:', err)
+      setAnalysis('Failed to generate analysis. Please try again.')
+    } finally {
+      setAnalysisLoading(false)
+    }
+  }, [result, agentName, analysisKey])
 
   const fetchResults = async () => {
     try {
@@ -207,6 +315,21 @@ function ResultsContent() {
               <Open20Regular className="h-4 w-4 mr-1" /> Foundry Portal
             </Button>
           )}
+          {result.status === 'completed' && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={generateAnalysis}
+              disabled={analysisLoading}
+              className="gap-1.5"
+            >
+              {analysisLoading ? (
+                <><svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" /></svg> Analyzing...</>
+              ) : (
+                <><svg className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor"><path d="M10 2a1 1 0 011 1v1.323l3.954 1.582 1.599-.8a1 1 0 01.894 1.79l-1.233.616 1.738 5.42a1 1 0 01-.285 1.05A3.989 3.989 0 0115 15a3.989 3.989 0 01-2.667-1.019 1 1 0 01-.285-1.05l1.715-5.349L11 6.477V16h2a1 1 0 110 2H7a1 1 0 110-2h2V6.477L6.237 7.582l1.715 5.349a1 1 0 01-.285 1.05A3.989 3.989 0 015 15a3.989 3.989 0 01-2.667-1.019 1 1 0 01-.285-1.05l1.738-5.42-1.233-.617a1 1 0 01.894-1.789l1.599.799L9 4.323V3a1 1 0 011-1z" /></svg> {analysis ? 'Regenerate' : 'AI Analysis'}</>
+              )}
+            </Button>
+          )}
         </div>
       </div>
 
@@ -247,6 +370,37 @@ function ResultsContent() {
             </div>
           )}
         </>
+      )}
+
+      {/* AI Analysis Card */}
+      {(analysis || analysisLoading) && (
+        <div className="rounded-2xl border border-purple-200 dark:border-purple-800 bg-purple-50/50 dark:bg-purple-900/10 overflow-hidden">
+          <div className="flex items-center justify-between px-6 py-4 border-b border-purple-200 dark:border-purple-800 cursor-pointer" onClick={() => setAnalysisOpen(!analysisOpen)}>
+            <div className="flex items-center gap-2">
+              <svg className="h-5 w-5 text-purple-600 dark:text-purple-400" viewBox="0 0 20 20" fill="currentColor"><path d="M10 2a1 1 0 011 1v1.323l3.954 1.582 1.599-.8a1 1 0 01.894 1.79l-1.233.616 1.738 5.42a1 1 0 01-.285 1.05A3.989 3.989 0 0115 15a3.989 3.989 0 01-2.667-1.019 1 1 0 01-.285-1.05l1.715-5.349L11 6.477V16h2a1 1 0 110 2H7a1 1 0 110-2h2V6.477L6.237 7.582l1.715 5.349a1 1 0 01-.285 1.05A3.989 3.989 0 015 15a3.989 3.989 0 01-2.667-1.019 1 1 0 01-.285-1.05l1.738-5.42-1.233-.617a1 1 0 01.894-1.789l1.599.799L9 4.323V3a1 1 0 011-1z" /></svg>
+              <h3 className="text-sm font-semibold text-purple-900 dark:text-purple-200">AI Evaluation Analysis</h3>
+              <span className="text-xs text-purple-500">GPT-5.4-mini · Reasoning</span>
+              {analysisSaved && <span className="text-xs text-green-600 dark:text-green-400 ml-2">Saved</span>}
+            </div>
+            <span className="text-purple-400 hover:text-purple-600 text-sm select-none">{analysisOpen ? 'Collapse' : 'Expand'}</span>
+          </div>
+          {analysisOpen && (
+          <div ref={analysisRef} className="px-6 py-4 max-h-[600px] overflow-y-auto prose prose-sm dark:prose-invert prose-purple max-w-none">
+            {analysisLoading && !analysis && (
+              <div className="flex items-center gap-3 py-4">
+                <div className="h-5 w-5 border-2 border-purple-500 border-t-transparent rounded-full animate-spin" />
+                <span className="text-sm text-purple-600 dark:text-purple-400">Collecting agent X-ray and analyzing evaluation data...</span>
+              </div>
+            )}
+            {analysis && (
+              <div dangerouslySetInnerHTML={{ __html: renderMarkdown(analysis) }} />
+            )}
+            {analysisLoading && analysis && (
+              <span className="inline-block w-2 h-4 bg-purple-500 animate-pulse ml-0.5" />
+            )}
+          </div>
+          )}
+        </div>
       )}
 
       {/* Per-Evaluator Results */}
