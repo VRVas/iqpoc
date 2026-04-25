@@ -31,11 +31,37 @@
         "properties": {
           "queries": {
             "type": "array",
-            "items": { "type": "string" },
+            "items": {
+              "type": "string"
+            },
             "description": "Search queries to find relevant information in the knowledge base"
           }
         },
-        "required": ["queries"]
+        "required": [
+          "queries"
+        ]
+      }
+    }
+  },
+  "kb_test_new_docuploadindex": {
+    "type": "function",
+    "function": {
+      "name": "knowledge_base_retrieve",
+      "description": "Knowledge base containing a 4 day trip travel plan to Qatar, things to do in Qatar, as well as visa requirements.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "queries": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Search queries to find relevant information in the knowledge base"
+          }
+        },
+        "required": [
+          "queries"
+        ]
       }
     }
   }

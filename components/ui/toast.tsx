@@ -62,7 +62,7 @@ function ToastContainer() {
   const { toasts } = useToast()
 
   return (
-    <div className="fixed right-6 top-6 z-50 w-96">
+    <div className="fixed right-6 bottom-6 z-50 w-96 flex flex-col-reverse gap-0">
       <AnimatePresence>
         {toasts.map((toast) => (
           <ToastItem key={toast.id} toast={toast} />
