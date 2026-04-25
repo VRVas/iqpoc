@@ -132,18 +132,26 @@ function RedTeamContent() {
       if (!response.ok) throw new Error(data.error || data.detail || 'Red team run failed')
       setResult(data)
 
-      // Persist to localStorage so it survives page refreshes
+      // Persist to localStorage + blob so it survives page refreshes and browser changes
       try {
         const RT_STORAGE_KEY = 'foundry-iq-red-team-runs'
+        const RT_BLOB_KEY = 'red-team-runs'
+        const runEntry = {
+          eval_id: data.eval_id,
+          run_id: data.run_id,
+          name: `Red Team - ${selectedAgent} - ${new Date().toISOString().slice(0, 16)}`,
+        }
         const existing = JSON.parse(localStorage.getItem(RT_STORAGE_KEY) || '[]')
         if (!existing.some((r: any) => r.run_id === data.run_id)) {
-          existing.push({
-            eval_id: data.eval_id,
-            run_id: data.run_id,
-            name: `Red Team - ${selectedAgent} - ${new Date().toISOString().slice(0, 16)}`,
-          })
+          existing.push(runEntry)
           localStorage.setItem(RT_STORAGE_KEY, JSON.stringify(existing))
         }
+        // Also save to blob for cross-session persistence
+        fetch(`/api/eval/insights/${RT_BLOB_KEY}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ runs: existing }),
+        }).catch(() => {})
       } catch {}
     } catch (err: any) {
       setError(err.message)

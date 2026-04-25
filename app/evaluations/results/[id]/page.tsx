@@ -127,6 +127,7 @@ function ResultsContent() {
   const [polling, setPolling] = useState(false)
   const [expandedItem, setExpandedItem] = useState<string | null>(null)
   const [currentPage, setCurrentPage] = useState(1)
+  const [showRedTeamGuide, setShowRedTeamGuide] = useState(false)
   const ITEMS_PER_PAGE = 10
 
   // AI Analysis state
@@ -288,6 +289,11 @@ function ResultsContent() {
   const sortedItems = result.items ? sortItemsByStatus(result.items) : []
   const sortedPerEvaluator = result.per_evaluator ? sortPerEvaluator(result.per_evaluator, result.items) : []
 
+  // Detect red team evaluation
+  const isRedTeam = result.items?.some((item: any) =>
+    item.results?.some((r: any) => r.type === 'azure_ai_red_team')
+  ) || false
+
   // Categorize always-errored evaluators
   const TOOL_DEF_EVALUATORS = ['tool_call_accuracy', 'tool_selection', 'tool_input_accuracy', 'tool_output_utilization']
   const LIMITED_SUPPORT_TOOLS = ['Azure AI Search', 'Code Interpreter', 'MCP']
@@ -372,6 +378,39 @@ function ResultsContent() {
         </>
       )}
 
+      {/* Red Team interpretation guide */}
+      {isRedTeam && (
+        <div className="rounded-xl border border-indigo-200 dark:border-indigo-800 bg-indigo-50/50 dark:bg-indigo-900/10 overflow-hidden">
+          <button
+            onClick={() => setShowRedTeamGuide(!showRedTeamGuide)}
+            className="w-full flex items-center justify-between px-4 py-3 text-left"
+          >
+            <div className="flex items-center gap-2">
+              <svg className="h-4 w-4 text-indigo-500" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a.75.75 0 000 1.5h.253a.25.25 0 01.244.304l-.459 2.066A1.75 1.75 0 0010.747 15H11a.75.75 0 000-1.5h-.253a.25.25 0 01-.244-.304l.459-2.066A1.75 1.75 0 009.253 9H9z" clipRule="evenodd" /></svg>
+              <span className="text-sm font-medium text-indigo-700 dark:text-indigo-300">How to read red team results</span>
+            </div>
+            <svg className={cn("h-4 w-4 text-indigo-400 transition-transform", showRedTeamGuide && "rotate-180")} viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clipRule="evenodd" /></svg>
+          </button>
+          {showRedTeamGuide && (
+            <div className="px-4 pb-4 text-xs text-indigo-700 dark:text-indigo-300 space-y-2 border-t border-indigo-200 dark:border-indigo-800 pt-3">
+              <p>Red team results measure your agent&apos;s <strong>resilience to adversarial attacks</strong>, not response quality. The key metric is <strong>Attack Success Rate (ASR)</strong> — lower is better.</p>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                <div className="flex items-start gap-1.5"><span className="text-green-500 mt-0.5">✓</span><span><strong>PASS</strong> = agent resisted the attack (attack failed). This is good.</span></div>
+                <div className="flex items-start gap-1.5"><span className="text-red-500 mt-0.5">✗</span><span><strong>FAIL</strong> = attack succeeded in causing misbehavior. Needs attention.</span></div>
+              </div>
+              <p className="font-medium mt-1">Evaluator coverage:</p>
+              <ul className="space-y-1 ml-3">
+                <li><strong>prohibited_actions</strong> — Tests banned actions (facial recognition, social scoring, etc.) via generated taxonomy. Runs on most items.</li>
+                <li><strong>sensitive_data_leakage</strong> — Tests if agent leaks financial/medical/personal data using synthetic data + mock tools.</li>
+                <li><strong>task_adherence</strong> — Tests instruction-following under adversarial pressure. <em>Only runs on the small subset of attacks targeting instruction deviation</em> — a low item count is expected.</li>
+              </ul>
+              <p className="mt-1">Each evaluator only runs on items relevant to its risk category — not every evaluator runs on every item. Results use generative models and are non-deterministic; false positives are possible.</p>
+              <p className="text-indigo-400 mt-1">Source: <a href="https://learn.microsoft.com/en-us/azure/foundry/concepts/ai-red-teaming-agent" target="_blank" rel="noopener noreferrer" className="underline hover:text-indigo-600">MS Learn — AI Red Teaming Agent</a></p>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* AI Analysis Card */}
       {(analysis || analysisLoading) && (
         <div className="rounded-2xl border border-purple-200 dark:border-purple-800 bg-purple-50/50 dark:bg-purple-900/10 overflow-hidden">
@@ -410,12 +449,19 @@ function ResultsContent() {
           <div className="space-y-3">
             {sortedPerEvaluator.map((ev: any) => {
               const ran = (ev.passed || 0) + (ev.failed || 0)
-              // For error count: only compute if we can derive from actual items, not from
-              // result_counts.total which is a cross-category aggregate (especially for red team)
-              const itemCount = result.items?.length || 0
-              const errorCount = itemCount > 0 ? Math.max(0, itemCount - ran) : 0
+              // Count actual errors for this evaluator from item-level results
+              // (don't assume totalItems - ran = errors — red team evals only run each evaluator on a subset of items)
+              let actualErrors = 0
+              result.items?.forEach((item: any) => {
+                item.results?.forEach((r: any) => {
+                  if ((r.name === ev.name || r.metric === ev.name) && getResultStatus(r) === 'error') {
+                    actualErrors++
+                  }
+                })
+              })
+              const errorCount = actualErrors
               const barTotal = ran + errorCount || 1
-              const isAllErrored = ran === 0 && itemCount > 0
+              const isAllErrored = ran === 0 && errorCount > 0
               const passRate = ran > 0 ? ((ev.passed || 0) / ran) * 100 : 0
               return (
                 <div key={ev.name} className="flex items-center gap-4">

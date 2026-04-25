@@ -67,6 +67,7 @@ export default function ResultsIndexPage() {
   // directly from the Foundry API on each load.
   // ---------------------------------------------------------------------------
   const RT_STORAGE_KEY = 'foundry-iq-red-team-runs'
+  const RT_BLOB_KEY = 'red-team-runs'
 
   function getStoredRedTeamRuns(): Array<{eval_id: string; run_id: string; name: string}> {
     try {
@@ -74,12 +75,38 @@ export default function ResultsIndexPage() {
     } catch { return [] }
   }
 
-  function storeRedTeamRun(evalId: string, runId: string, name: string) {
+  function storeRedTeamRunLocal(evalId: string, runId: string, name: string) {
     const existing = getStoredRedTeamRuns()
     if (!existing.some(r => r.run_id === runId)) {
       existing.push({ eval_id: evalId, run_id: runId, name })
       localStorage.setItem(RT_STORAGE_KEY, JSON.stringify(existing))
     }
+  }
+
+  // Sync red team runs to/from blob storage (durable persistence)
+  async function syncRedTeamRunsFromBlob() {
+    try {
+      const resp = await fetch(`/api/eval/insights/${RT_BLOB_KEY}`)
+      if (!resp.ok) return
+      const data = await resp.json()
+      const blobRuns: Array<{eval_id: string; run_id: string; name: string}> = data.runs || []
+      // Merge blob runs into localStorage (blob is source of truth)
+      for (const run of blobRuns) {
+        storeRedTeamRunLocal(run.eval_id, run.run_id, run.name)
+      }
+    } catch { /* blob not available */ }
+  }
+
+  async function saveRedTeamRunToBlob(evalId: string, runId: string, name: string) {
+    storeRedTeamRunLocal(evalId, runId, name)
+    try {
+      const allRuns = getStoredRedTeamRuns()
+      await fetch(`/api/eval/insights/${RT_BLOB_KEY}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ runs: allRuns }),
+      })
+    } catch { /* best effort */ }
   }
 
   const fetchHistory = () => {
@@ -121,15 +148,21 @@ export default function ResultsIndexPage() {
       .finally(() => setLoading(false))
   }
 
-  // Seed the existing red team run on first mount
+  // Seed the existing red team run on first mount + sync from blob
   useEffect(() => {
-    // Register the known red team run so it persists across refreshes
-    storeRedTeamRun(
+    // Register the known red team runs so they persist across refreshes
+    storeRedTeamRunLocal(
       'eval_2b986ef7d2ab42c28b1901650f253cec',
       'evalrun_431e6d9084854b899c3ea439d085297c',
       'Red Team - agent-1774946608254 - 2026-04-08T17:46'
     )
-    fetchHistory()
+    storeRedTeamRunLocal(
+      'eval_399d9a968902457bb94772327370754a',
+      'evalrun_30ae05c7ddab400dadf9458dec5a96ae',
+      'Red Team - cc-general-operator - 2026-04-25'
+    )
+    // Sync from blob (picks up runs from other sessions/browsers)
+    syncRedTeamRunsFromBlob().then(() => fetchHistory())
   }, [])
 
   const evalRuns = allRuns.filter(r => r.type !== 'red_team')
