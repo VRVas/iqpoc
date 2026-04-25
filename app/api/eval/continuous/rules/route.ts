@@ -29,3 +29,42 @@ export async function GET() {
     )
   }
 }
+
+/**
+ * PATCH /api/eval/continuous/rules?rule_id=X&enabled=true/false
+ * Toggle a rule's enabled state.
+ */
+export async function PATCH(req: Request) {
+  try {
+    if (!EVAL_SERVICE_URL) return NextResponse.json({ error: 'EVAL_SERVICE_URL not configured' }, { status: 500 })
+    const { searchParams } = new URL(req.url)
+    const ruleId = searchParams.get('rule_id')
+    const enabled = searchParams.get('enabled') === 'true'
+    if (!ruleId) return NextResponse.json({ error: 'rule_id required' }, { status: 400 })
+
+    const resp = await fetch(`${EVAL_SERVICE_URL}/continuous/rules/${encodeURIComponent(ruleId)}?enabled=${enabled}`, { method: 'PATCH' })
+    const data = await resp.json()
+    return NextResponse.json(data, { status: resp.status })
+  } catch (err) {
+    return NextResponse.json({ error: 'Failed to toggle rule' }, { status: 502 })
+  }
+}
+
+/**
+ * DELETE /api/eval/continuous/rules?rule_id=X
+ * Delete a rule.
+ */
+export async function DELETE(req: Request) {
+  try {
+    if (!EVAL_SERVICE_URL) return NextResponse.json({ error: 'EVAL_SERVICE_URL not configured' }, { status: 500 })
+    const { searchParams } = new URL(req.url)
+    const ruleId = searchParams.get('rule_id')
+    if (!ruleId) return NextResponse.json({ error: 'rule_id required' }, { status: 400 })
+
+    const resp = await fetch(`${EVAL_SERVICE_URL}/continuous/rules/${encodeURIComponent(ruleId)}`, { method: 'DELETE' })
+    const data = await resp.json()
+    return NextResponse.json(data, { status: resp.status })
+  } catch (err) {
+    return NextResponse.json({ error: 'Failed to delete rule' }, { status: 502 })
+  }
+}

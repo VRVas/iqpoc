@@ -111,7 +111,7 @@ async def configure_continuous_eval(req: ContinuousEvalRequest):
 
 @router.get("/rules")
 async def list_continuous_rules():
-    """List all continuous evaluation rules."""
+    """List all continuous evaluation rules with full details."""
     try:
         project_client = get_project_client()
         rules = list(project_client.evaluation_rules.list())
@@ -120,12 +120,132 @@ async def list_continuous_rules():
                 {
                     "id": r.id,
                     "display_name": getattr(r, "display_name", ""),
+                    "description": getattr(r, "description", ""),
                     "enabled": getattr(r, "enabled", False),
                     "event_type": str(getattr(r, "event_type", "")),
+                    "agent_name": getattr(getattr(r, "filter", None), "agent_name", None),
+                    "eval_id": getattr(getattr(r, "action", None), "eval_id", None),
+                    "max_hourly_runs": getattr(getattr(r, "action", None), "max_hourly_runs", None),
                 }
                 for r in rules
             ]
         }
     except Exception as e:
         logger.exception("Failed to list rules")
+        raise HTTPException(500, str(e))
+
+
+@router.get("/rules/by-agent/{agent_name}")
+async def get_rule_for_agent(agent_name: str):
+    """Get the continuous evaluation rule for a specific agent, if one exists."""
+    try:
+        project_client = get_project_client()
+        rules = list(project_client.evaluation_rules.list())
+        for r in rules:
+            filt = getattr(r, "filter", None)
+            if filt and getattr(filt, "agent_name", None) == agent_name:
+                action = getattr(r, "action", None)
+                return {
+                    "found": True,
+                    "rule_id": r.id,
+                    "display_name": getattr(r, "display_name", ""),
+                    "enabled": getattr(r, "enabled", False),
+                    "eval_id": getattr(action, "eval_id", None) if action else None,
+                    "max_hourly_runs": getattr(action, "max_hourly_runs", 100) if action else 100,
+                }
+        return {"found": False}
+    except Exception as e:
+        logger.exception("Failed to find rule for agent %s", agent_name)
+        raise HTTPException(500, str(e))
+
+
+@router.get("/latest-scores")
+async def get_latest_scores(eval_id: str, limit: int = 1):
+    """Get the latest continuous eval run results for a given eval_id.
+
+    Returns per-evaluator scores from the most recent completed run.
+    Used by on-the-go chat evaluations to display inline scores.
+    """
+    try:
+        client = get_openai_client()
+        runs = client.evals.runs.list(eval_id=eval_id, order="desc", limit=limit)
+        results = []
+        for run in runs.data:
+            if run.status != "completed":
+                continue
+            items = list(client.evals.runs.output_items.list(
+                run_id=run.id, eval_id=eval_id
+            ))
+            scores = []
+            for item in items:
+                for r in getattr(item, "results", []) or []:
+                    scores.append({
+                        "name": getattr(r, "name", getattr(r, "metric", "unknown")),
+                        "score": getattr(r, "score", None),
+                        "passed": getattr(r, "passed", None),
+                        "label": getattr(r, "label", None),
+                    })
+            results.append({
+                "run_id": run.id,
+                "status": run.status,
+                "created_at": getattr(run, "created_at", None),
+                "scores": scores,
+            })
+            if len(results) >= limit:
+                break
+        return {"runs": results}
+    except Exception as e:
+        logger.exception("Failed to get latest scores for eval %s", eval_id)
+        raise HTTPException(500, str(e))
+
+
+@router.delete("/rules/{rule_id}")
+async def delete_rule(rule_id: str):
+    """Delete a continuous evaluation rule."""
+    try:
+        project_client = get_project_client()
+        project_client.evaluation_rules.delete(rule_id)
+        return {"deleted": True, "rule_id": rule_id}
+    except Exception as e:
+        logger.exception("Failed to delete rule %s", rule_id)
+        raise HTTPException(500, str(e))
+
+
+@router.patch("/rules/{rule_id}")
+async def toggle_rule(rule_id: str, enabled: bool = True):
+    """Enable or disable a continuous evaluation rule."""
+    try:
+        project_client = get_project_client()
+        from azure.ai.projects.models import (
+            EvaluationRule,
+            ContinuousEvaluationRuleAction,
+            EvaluationRuleFilter,
+            EvaluationRuleEventType,
+        )
+        # Retrieve, modify, re-save
+        rules = list(project_client.evaluation_rules.list())
+        target = None
+        for r in rules:
+            if r.id == rule_id:
+                target = r
+                break
+        if not target:
+            raise HTTPException(404, f"Rule {rule_id} not found")
+
+        project_client.evaluation_rules.create_or_update(
+            id=rule_id,
+            evaluation_rule=EvaluationRule(
+                display_name=getattr(target, "display_name", ""),
+                description=getattr(target, "description", ""),
+                action=getattr(target, "action", None),
+                event_type=getattr(target, "event_type", EvaluationRuleEventType.RESPONSE_COMPLETED),
+                filter=getattr(target, "filter", None),
+                enabled=enabled,
+            ),
+        )
+        return {"rule_id": rule_id, "enabled": enabled}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("Failed to toggle rule %s", rule_id)
         raise HTTPException(500, str(e))

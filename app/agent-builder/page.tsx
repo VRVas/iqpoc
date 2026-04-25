@@ -30,6 +30,7 @@ import { LoadingSkeleton } from '@/components/shared/loading-skeleton'
 import { AgentCodeModal } from '@/components/agent-code-modal'
 import { cn } from '@/lib/utils'
 import { InlineCitationsText, SourcesCountButton } from '@/components/inline-citations'
+import { EvalScoreBubble } from '@/components/eval-score-bubble'
 import { MarkdownMessage } from '@/components/markdown-message'
 import { SourcesPanel } from '@/components/sources-panel'
 import { RuntimeSettingsPanel } from '@/components/runtime-settings-panel'
@@ -111,6 +112,9 @@ function AgentBuilderPageContent() {
   const [starterQuestions, setStarterQuestions] = useState<string[]>([])
   const [generatingStarters, setGeneratingStarters] = useState(false)
 
+  // Continuous eval rule for on-the-go scoring (admin mode)
+  const [continuousEvalId, setContinuousEvalId] = useState<string | null>(null)
+
   // Runtime settings for knowledge source parameters (per-source toggles)
   const [runtimeSettingsOpen, setRuntimeSettingsOpen] = useState(false)
   const [runtimeSettings, setRuntimeSettings] = useState<{
@@ -182,6 +186,34 @@ function AgentBuilderPageContent() {
     }
     init()
   }, [existingAssistantId, mode])
+
+  // Auto-check for continuous eval rule when agent loads (admin mode)
+  // Uses the existing /rules endpoint and matches client-side (works without eval service redeployment)
+  useEffect(() => {
+    if (!isAdmin || !agentName_saved) return
+    fetch('/api/eval/continuous/rules')
+      .then(r => r.json())
+      .then(data => {
+        const rules = data.rules || []
+        // Find a rule that matches this agent (by agent_name filter or rule ID containing agent name)
+        const match = rules.find((r: any) =>
+          (r.agent_name === agentName_saved) ||
+          (r.id && r.id.includes(agentName_saved)) ||
+          // Fallback: any enabled rule (if only one exists)
+          (rules.length === 1 && r.enabled)
+        )
+        if (match && match.eval_id && match.enabled) {
+          setContinuousEvalId(match.eval_id)
+          console.log('[on-the-go] Continuous eval rule found:', match.eval_id, 'for agent:', match.agent_name || match.id)
+        } else if (match && match.enabled && !match.eval_id) {
+          // Rule exists but eval_id not exposed yet (eval service needs redeployment for full details)
+          console.log('[on-the-go] Rule found but eval_id not available (eval service needs update):', match.id)
+        } else {
+          console.log('[on-the-go] No active continuous eval rule for', agentName_saved)
+        }
+      })
+      .catch(() => { /* eval service may be down */ })
+  }, [isAdmin, agentName_saved])
 
   const loadExistingAgentDetails = async () => {
     if (!existingAssistantId) return
@@ -1840,13 +1872,22 @@ function AgentBuilderPageContent() {
                           </div>
                         )}
 
-                        {/* Sources button */}
-                        {!isUser && refs.length > 0 && (
-                          <div className="mt-4 pt-4 border-t border-stroke-divider">
-                            <SourcesCountButton
-                              references={refs}
-                              onClick={() => handleOpenSourcesPanel(msgId, refs, acts, message.content?.slice(0, 100))}
-                            />
+                        {/* Sources button + Eval score bubble */}
+                        {!isUser && (refs.length > 0 || (isAdmin && continuousEvalId)) && (
+                          <div className="mt-4 pt-4 border-t border-stroke-divider flex items-center gap-2 flex-wrap">
+                            {refs.length > 0 && (
+                              <SourcesCountButton
+                                references={refs}
+                                onClick={() => handleOpenSourcesPanel(msgId, refs, acts, message.content?.slice(0, 100))}
+                              />
+                            )}
+                            {isAdmin && continuousEvalId && (
+                              <EvalScoreBubble
+                                agentName={agentName_saved || agentName}
+                                evalId={continuousEvalId}
+                                responseTimestamp={message.timestamp ? new Date(message.timestamp).getTime() : undefined}
+                              />
+                            )}
                           </div>
                         )}
 
