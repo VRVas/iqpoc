@@ -13,21 +13,20 @@ interface EvalScore {
 
 interface EvalScoreBubbleProps {
   agentName: string
-  evalId: string | null
-  responseTimestamp?: number
+  responseId: string | null
   className?: string
 }
 
 /**
  * On-the-go evaluation score bubble for agent chat messages.
  * 
- * Shows a small pill with aggregate pass/fail count.
+ * Triggers an explicit per-response evaluation via the eval service,
+ * then polls for results. Shows a small pill with aggregate pass/fail.
  * On click, expands to show per-evaluator details.
- * Lazy-polls the continuous eval latest-scores endpoint.
  * 
  * Only rendered in admin mode.
  */
-export function EvalScoreBubble({ agentName, evalId, responseTimestamp, className }: EvalScoreBubbleProps) {
+export function EvalScoreBubble({ agentName, responseId, className }: EvalScoreBubbleProps) {
   const [scores, setScores] = useState<EvalScore[]>([])
   const [loading, setLoading] = useState(true)
   const [expanded, setExpanded] = useState(false)
@@ -37,55 +36,100 @@ export function EvalScoreBubble({ agentName, evalId, responseTimestamp, classNam
   const startTime = useRef(Date.now())
 
   useEffect(() => {
-    if (!evalId) {
+    if (!responseId) {
       setLoading(false)
       setFailed(true)
       return
     }
 
     let cancelled = false
-    let attempts = 0
-    const maxAttempts = 10 // poll for ~30s max
+    const maxPollAttempts = 30 // poll for ~90s max (eval takes time)
     const pollInterval = 3000
 
-    const poll = async () => {
-      if (cancelled) return
-      attempts++
-      setElapsed(Math.round((Date.now() - startTime.current) / 1000))
-
+    const runEval = async () => {
+      // Step 1: Trigger the evaluation
+      console.log(`[on-the-go] Starting eval for response: ${responseId}`)
       try {
-        const resp = await fetch(`/api/eval/continuous/scores?eval_id=${encodeURIComponent(evalId)}&limit=1`)
-        if (!resp.ok) throw new Error('fetch failed')
-        const data = await resp.json()
+        const triggerResp = await fetch('/api/eval/on-the-go', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ response_id: responseId }),
+        })
+        if (!triggerResp.ok) {
+          const err = await triggerResp.text()
+          console.error('[on-the-go] Failed to trigger eval:', err)
+          setLoading(false)
+          setFailed(true)
+          return
+        }
+        const { eval_id, run_id } = await triggerResp.json()
+        console.log(`[on-the-go] Eval triggered: eval_id=${eval_id}, run_id=${run_id}`)
 
-        if (data.runs && data.runs.length > 0 && data.runs[0].scores?.length > 0) {
-          const run = data.runs[0]
-          // Check if this run is recent enough (within 60s of our response)
-          const runCreatedAt = run.created_at ? run.created_at * 1000 : 0
-          const timeDiff = responseTimestamp ? Math.abs(runCreatedAt - responseTimestamp) : 0
+        // Step 2: Poll for results
+        let attempts = 0
+        const poll = async () => {
+          if (cancelled) return
+          attempts++
+          setElapsed(Math.round((Date.now() - startTime.current) / 1000))
 
-          if (!responseTimestamp || timeDiff < 120000 || attempts >= maxAttempts) {
-            setScores(run.scores)
-            setLoading(false)
-            setElapsed(Math.round((Date.now() - startTime.current) / 1000))
-            return
+          try {
+            const statusResp = await fetch(
+              `/api/eval/on-the-go/status?eval_id=${encodeURIComponent(eval_id)}&run_id=${encodeURIComponent(run_id)}`
+            )
+            if (!statusResp.ok) throw new Error(`status fetch failed: ${statusResp.status}`)
+            const data = await statusResp.json()
+            console.log(`[on-the-go] Poll ${attempts}: status=${data.status}`)
+
+            if (data.status === 'completed' && data.per_evaluator) {
+              const evalScores: EvalScore[] = data.per_evaluator.map((e: any) => ({
+                name: e.name,
+                score: e.pass_rate != null ? e.pass_rate : null,
+                passed: e.failed === 0 && e.passed > 0,
+              }))
+              console.log(`[on-the-go] Scores:`, evalScores.map(s => `${s.name}=${s.passed ? 'pass' : 'fail'}`).join(', '))
+              setScores(evalScores)
+              setLoading(false)
+              setElapsed(Math.round((Date.now() - startTime.current) / 1000))
+              return
+            }
+
+            if (data.status === 'failed') {
+              console.error('[on-the-go] Eval run failed:', data)
+              setLoading(false)
+              setFailed(true)
+              return
+            }
+
+            // Still running — continue polling
+            if (attempts < maxPollAttempts && !cancelled) {
+              setTimeout(poll, pollInterval)
+            } else if (!cancelled) {
+              console.log('[on-the-go] Max poll attempts reached')
+              setLoading(false)
+            }
+          } catch (err) {
+            console.log(`[on-the-go] Poll ${attempts} error:`, err)
+            if (attempts < maxPollAttempts && !cancelled) {
+              setTimeout(poll, pollInterval)
+            } else if (!cancelled) {
+              setLoading(false)
+            }
           }
         }
-      } catch { /* continue polling */ }
 
-      if (attempts < maxAttempts && !cancelled) {
-        setTimeout(poll, pollInterval)
-      } else if (!cancelled) {
+        // Start polling after a short delay
+        setTimeout(poll, 3000)
+      } catch (err) {
+        console.error('[on-the-go] Error triggering eval:', err)
         setLoading(false)
         setFailed(true)
       }
     }
 
-    // Delay first poll by 3s to give Foundry time to trigger the eval
-    setTimeout(poll, pollInterval)
+    runEval()
 
     return () => { cancelled = true }
-  }, [evalId, responseTimestamp])
+  }, [responseId])
 
   // Close popover on click outside
   useEffect(() => {
@@ -98,13 +142,13 @@ export function EvalScoreBubble({ agentName, evalId, responseTimestamp, classNam
     return () => document.removeEventListener('mousedown', handler)
   }, [expanded])
 
-  if (failed && !loading) return null // silently don't show if no rule or eval failed
-  if (!evalId) return null
+  if (!responseId) return null
 
   const passed = scores.filter(s => s.passed === true).length
   const total = scores.length
   const allPassed = total > 0 && passed === total
   const hasFails = scores.some(s => s.passed === false)
+  const noScores = !loading && total === 0
 
   return (
     <div className={cn('relative inline-flex', className)} ref={popoverRef}>
@@ -115,11 +159,13 @@ export function EvalScoreBubble({ agentName, evalId, responseTimestamp, classNam
           'border backdrop-blur-sm',
           loading
             ? 'border-blue-300/50 bg-blue-50/50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400'
-            : allPassed
-              ? 'border-green-300/50 bg-green-50/50 dark:bg-green-900/20 text-green-700 dark:text-green-400 hover:bg-green-100/70'
-              : hasFails
-                ? 'border-red-300/50 bg-red-50/50 dark:bg-red-900/20 text-red-700 dark:text-red-400 hover:bg-red-100/70'
-                : 'border-amber-300/50 bg-amber-50/50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-400 hover:bg-amber-100/70'
+            : noScores
+              ? 'border-gray-300/50 bg-gray-50/50 dark:bg-gray-800/20 text-gray-500 dark:text-gray-400'
+              : allPassed
+                ? 'border-green-300/50 bg-green-50/50 dark:bg-green-900/20 text-green-700 dark:text-green-400 hover:bg-green-100/70'
+                : hasFails
+                  ? 'border-red-300/50 bg-red-50/50 dark:bg-red-900/20 text-red-700 dark:text-red-400 hover:bg-red-100/70'
+                  : 'border-amber-300/50 bg-amber-50/50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-400 hover:bg-amber-100/70'
         )}
         disabled={loading}
       >
@@ -129,7 +175,12 @@ export function EvalScoreBubble({ agentName, evalId, responseTimestamp, classNam
               <circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="2" className="opacity-25" />
               <path d="M14 8a6 6 0 00-6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="opacity-75" />
             </svg>
-            <span>Evaluating...</span>
+            <span>Evaluating... {elapsed}s</span>
+          </>
+        ) : noScores ? (
+          <>
+            <span>📊</span>
+            <span>pending</span>
           </>
         ) : (
           <>
@@ -178,7 +229,7 @@ export function EvalScoreBubble({ agentName, evalId, responseTimestamp, classNam
               ))}
             </div>
             <div className="px-3 py-1.5 border-t border-stroke-divider">
-              <span className="text-[10px] text-fg-muted">Powered by Continuous Eval · {agentName}</span>
+              <span className="text-[10px] text-fg-muted">Powered by Per-Response Eval · {agentName}</span>
             </div>
           </motion.div>
         )}
