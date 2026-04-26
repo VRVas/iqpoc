@@ -87,11 +87,11 @@ export default function EvaluationsPage() {
           onClick={() => router.push('/evaluations/results?edit=admin')}
         />
 
-        {/* Continuous Evaluation */}
+        {/* Continuous & Scheduled Evaluation */}
         <ActionCard
           icon={ArrowSync20Regular}
-          title="Continuous Eval"
-          description="Configure automatic evaluation rules for production agent responses"
+          title="Continuous & Scheduled"
+          description="Automatic evaluation rules and recurring schedules for production agents"
           color="green"
           onClick={() => router.push('/evaluations/continuous?edit=admin')}
         />
