@@ -412,6 +412,7 @@ def create_eval_and_run_response_ids(
 
     testing_criteria = build_testing_criteria(evaluator_names, model_deployment, eval_mode="response_ids")
     # For response-ID eval, remove data_mapping since schema is auto-inferred
+    # Per MS Learn: azure_ai_responses retrieves the full conversation from the response ID
     for tc in testing_criteria:
         if "data_mapping" in tc:
             del tc["data_mapping"]

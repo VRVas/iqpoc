@@ -21,6 +21,8 @@ export async function POST(req: Request) {
     }
 
     // Default evaluators for on-the-go: quality + safety + agent
+    // Note: protected_material is excluded — it requires explicit response mapping
+    // that azure_ai_responses data source doesn't provide, blocking the entire run.
     const evalList = evaluators || [
       'coherence',
       'fluency',
@@ -31,7 +33,6 @@ export async function POST(req: Request) {
       'hate_unfairness',
       'self_harm',
       'sexual',
-      'protected_material',
       'indirect_attack',
     ]
 
