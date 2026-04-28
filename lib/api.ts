@@ -434,7 +434,8 @@ export async function sendAgentResponse(data: {
 
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({}))
-    throw new Error(errorData.error || 'Failed to get agent response')
+    const detail = errorData.details?.error?.message || errorData.error || `Failed to get agent response (${response.status})`
+    throw new Error(detail)
   }
 
   return response.json()

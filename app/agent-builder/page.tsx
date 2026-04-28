@@ -698,10 +698,17 @@ function AgentBuilderPageContent() {
     for (const item of output) {
       if (item.type === 'message' && item.role === 'assistant') {
         // Extract text from message content
+        // Use only the LAST assistant message to avoid duplication —
+        // in function-call loops, intermediate responses may include
+        // partial assistant messages that get re-included in the final output.
+        let msgText = ''
         for (const content of (item.content || [])) {
           if (content.type === 'output_text') {
-            text += content.text || ''
+            msgText += content.text || ''
           }
+        }
+        if (msgText) {
+          text = msgText // overwrite, not append — last message wins
         }
 
         // Extract annotations/citations from message content

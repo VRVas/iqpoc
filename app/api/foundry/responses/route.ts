@@ -52,6 +52,7 @@ export async function POST(request: Request) {
         type: 'agent_reference',
         name: agentName,
       },
+      truncation: 'auto', // Auto-trim old conversation context to prevent context overflow
     }
 
     console.log('[responses/v2] Sending:', JSON.stringify({
@@ -344,6 +345,7 @@ export async function POST(request: Request) {
           type: 'agent_reference',
           name: agentName,
         },
+        truncation: 'auto',
       }
 
       console.log(`[responses/v2] Sending ${functionOutputs.length} function output(s) back to agent`)
