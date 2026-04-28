@@ -441,6 +441,107 @@ export async function sendAgentResponse(data: {
   return response.json()
 }
 
+/**
+ * Send a message to an agent with SSE streaming.
+ * 
+ * Calls the same /api/foundry/responses endpoint with stream: true.
+ * Returns an object with callbacks for progressive rendering:
+ * - onTextDelta(text): called with each text chunk as it arrives
+ * - onSourcesReady(sources, responseId): called when MCP sources are parsed
+ * - onComplete(fullResponse): called when the stream finishes
+ * - onError(error): called on any error
+ */
+export async function sendAgentResponseStream(
+  data: {
+    conversationId: string
+    agentName: string
+    input: string
+    knowledgeSourceParams?: any[]
+  },
+  callbacks: {
+    onTextDelta: (text: string) => void
+    onSourcesReady: (sources: any[], responseId: string, usage: any) => void
+    onComplete: () => void
+    onError: (error: Error) => void
+    onToolCall?: (toolName: string, serverLabel: string) => void
+  }
+): Promise<void> {
+  try {
+    const response = await fetch('/api/foundry/responses', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...data, stream: true }),
+    })
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}))
+      const detail = errorData.details?.error?.message || errorData.error || `Failed to get agent response (${response.status})`
+      throw new Error(detail)
+    }
+
+    if (!response.body) {
+      throw new Error('No stream body received')
+    }
+
+    const reader = response.body.getReader()
+    const decoder = new TextDecoder()
+    let buffer = ''
+
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+
+      buffer += decoder.decode(value, { stream: true })
+
+      // Process complete SSE events (separated by \n\n)
+      const events = buffer.split('\n\n')
+      buffer = events.pop() || '' // Keep the last incomplete chunk
+
+      for (const eventBlock of events) {
+        const lines = eventBlock.split('\n')
+        let eventType = ''
+        let eventData = ''
+
+        for (const line of lines) {
+          if (line.startsWith('event: ')) {
+            eventType = line.slice(7).trim()
+          } else if (line.startsWith('data: ')) {
+            eventData += line.slice(6)
+          }
+        }
+
+        if (!eventData || eventData === '[DONE]') continue
+
+        try {
+          const parsed = JSON.parse(eventData)
+
+          // Text delta — the main streaming content
+          if (parsed.type === 'response.output_text.delta') {
+            callbacks.onTextDelta(parsed.delta || '')
+          }
+
+          // MCP tool call started — show "Searching KB..." indicator
+          if (parsed.type === 'response.mcp_call.in_progress' || parsed.type === 'response.output_item.added') {
+            const item = parsed.item || parsed
+            if (item.type === 'mcp_call') {
+              callbacks.onToolCall?.(item.name || 'knowledge_base_retrieve', item.server_label || '')
+            }
+          }
+
+          // Custom app event: sources parsed from MCP outputs
+          if (parsed.type === 'app.sources') {
+            callbacks.onSourcesReady(parsed.sources || [], parsed.responseId || '', parsed.usage)
+          }
+        } catch { /* ignore partial JSON */ }
+      }
+    }
+
+    callbacks.onComplete()
+  } catch (err: any) {
+    callbacks.onError(err instanceof Error ? err : new Error(String(err)))
+  }
+}
+
 export async function getKnowledgeSourceStatus(sourceName: string): Promise<any> {
   const response = await fetch(`/api/knowledge-sources/${sourceName}/status`, {
     cache: 'no-store',

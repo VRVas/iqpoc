@@ -25,7 +25,7 @@ import { getQatarDateTime } from '@/lib/utils'
 export async function POST(request: Request) {
   try {
     const body = await request.json()
-    const { conversationId, agentName, input, knowledgeSourceParams } = body
+    const { conversationId, agentName, input, knowledgeSourceParams, stream: streamRequested } = body
 
     if (!conversationId || !agentName || !input) {
       return NextResponse.json(
@@ -59,7 +59,144 @@ export async function POST(request: Request) {
       conversation: conversationId,
       agent: agentName,
       input: input.slice(0, 100) + (input.length > 100 ? '...' : ''),
+      stream: !!streamRequested,
     }))
+
+    // =========================================================================
+    // STREAMING PATH — for MCP-based agents (no function-call loop needed)
+    // Pipes SSE events from Foundry directly to the client, then appends
+    // a custom 'sources' event with parsed MCP KB references.
+    // =========================================================================
+    if (streamRequested) {
+      const streamPayload = { ...payload, stream: true }
+      const response = await fetch(
+        agentsV2Url('/openai/responses', 'responses'),
+        { method: 'POST', headers, body: JSON.stringify(streamPayload) }
+      )
+
+      if (!response.ok) {
+        const errText = await response.text()
+        console.error('[responses/v2/stream] Foundry error:', response.status, errText.slice(0, 300))
+        return NextResponse.json(
+          { error: `Foundry streaming error (${response.status})`, details: errText.slice(0, 500) },
+          { status: response.status }
+        )
+      }
+
+      if (!response.body) {
+        return NextResponse.json({ error: 'No stream body from Foundry' }, { status: 502 })
+      }
+
+      // Create a transform that:
+      // 1. Forwards all Foundry SSE events to the client
+      // 2. Accumulates MCP call data for source extraction
+      // 3. On response.completed, appends a custom 'app.sources' event
+      const foundryStream = response.body
+      const encoder = new TextEncoder()
+      const decoder = new TextDecoder()
+
+      let mcpOutputs: { name: string; output: string; server_label: string; arguments: any }[] = []
+      let completedResponse: any = null
+
+      const transformStream = new TransformStream({
+        transform(chunk, controller) {
+          // Forward the raw SSE chunk to the client
+          controller.enqueue(chunk)
+
+          // Also parse it to extract MCP data
+          const text = decoder.decode(chunk, { stream: true })
+          const lines = text.split('\n')
+
+          for (const line of lines) {
+            if (!line.startsWith('data: ')) continue
+            const jsonStr = line.slice(6).trim()
+            if (!jsonStr || jsonStr === '[DONE]') continue
+
+            try {
+              const event = JSON.parse(jsonStr)
+
+              // Capture MCP call completions for source extraction
+              if (event.type === 'response.mcp_call.completed' || event.type === 'response.output_item.done') {
+                const item = event.item || event
+                if (item.type === 'mcp_call' && item.output) {
+                  mcpOutputs.push({
+                    name: item.name || '',
+                    output: item.output,
+                    server_label: item.server_label || '',
+                    arguments: item.arguments,
+                  })
+                }
+              }
+
+              // Capture the completed response for metadata
+              if (event.type === 'response.completed' && event.response) {
+                completedResponse = event.response
+              }
+            } catch { /* ignore parse errors in partial chunks */ }
+          }
+        },
+        flush(controller) {
+          // After the Foundry stream ends, emit a custom event with parsed sources
+          try {
+            const sources: any[] = []
+            for (const mcp of mcpOutputs) {
+              const parsed = parseMcpKbSources(mcp.output)
+              sources.push(...parsed)
+            }
+
+            const appData = {
+              type: 'app.sources',
+              sources,
+              responseId: completedResponse?.id || '',
+              usage: completedResponse?.usage || null,
+            }
+            const sseEvent = `event: app.sources\ndata: ${JSON.stringify(appData)}\n\n`
+            controller.enqueue(encoder.encode(sseEvent))
+          } catch (err) {
+            console.warn('[responses/v2/stream] Source extraction error:', err)
+          }
+
+          // Fire-and-forget: log to eval service
+          try {
+            if (completedResponse && process.env.EVAL_SERVICE_URL) {
+              const respText = (completedResponse.output || [])
+                .filter((o: any) => o.type === 'message' && o.role === 'assistant')
+                .map((o: any) => o.content?.map((c: any) => c.text).join('') || '')
+                .join('\n')
+              fetch(`${process.env.EVAL_SERVICE_URL}/response-log/log`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  response_id: completedResponse.id,
+                  conversation_id: conversationId,
+                  agent_name: agentName,
+                  user_query: input,
+                  response_text: respText.slice(0, 5000),
+                  timestamp: new Date().toISOString(),
+                  has_mcp_call: mcpOutputs.length > 0,
+                  loop_count: 0,
+                }),
+              }).catch(() => {})
+            }
+          } catch {}
+        },
+      })
+
+      const readableStream = foundryStream.pipeThrough(transformStream)
+
+      return new Response(readableStream, {
+        headers: {
+          'Content-Type': 'text/event-stream',
+          'Cache-Control': 'no-cache',
+          'Connection': 'keep-alive',
+          'X-Conversation-Id': conversationId,
+        },
+      })
+    }
+
+    // =========================================================================
+    // NON-STREAMING PATH — supports function-call loop for legacy agents
+    // =========================================================================
 
     // Collect all output items across the function-call loop
     // so the UI gets the full retrieval journey

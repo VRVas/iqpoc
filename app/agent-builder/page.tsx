@@ -25,7 +25,7 @@ import { Card } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select'
-import { fetchKnowledgeBases, fetchKnowledgeSources, createFoundryAgentV2, createConversation, sendAgentResponse } from '@/lib/api'
+import { fetchKnowledgeBases, fetchKnowledgeSources, createFoundryAgentV2, createConversation, sendAgentResponse, sendAgentResponseStream } from '@/lib/api'
 import { LoadingSkeleton } from '@/components/shared/loading-skeleton'
 import { AgentCodeModal } from '@/components/agent-code-modal'
 import { cn } from '@/lib/utils'
@@ -608,7 +608,6 @@ function AgentBuilderPageContent() {
         setSettingsDirty(false)
       }
 
-      // Send message and get response — SYNCHRONOUS, no polling needed!
       // Include knowledge source runtime params if configured
       const cleanedParams = runtimeSettings.knowledgeSourceParams
         .filter(p => p.knowledgeSourceName)
@@ -622,35 +621,69 @@ function AgentBuilderPageContent() {
           return cleaned
         })
 
-      const responseData = await sendAgentResponse({
-        conversationId,
-        agentName: agentName_saved,
-        input: userMessage,
-        knowledgeSourceParams: cleanedParams.length > 0 ? cleanedParams : undefined,
-      })
-
-      console.log('[v2] Response received:', {
-        id: responseData.id,
-        status: responseData.status,
-        outputCount: responseData.output?.length || 0,
-      })
-
-      // Extract the assistant message and references from the response output
-      const { text, references, mcpCalls, activity, codeBlocks, generatedFiles } = extractResponseContent(responseData)
-
       const msgId = `msg-${Date.now()}`
+      let streamedText = ''
+
+      // Add an empty assistant message that will be updated as text streams in
       setMessages(prev => [...prev, {
         id: msgId,
         role: 'assistant',
-        content: text,
+        content: '',
         timestamp: new Date().toISOString(),
-        toolCalls: mcpCalls,
-        responseId: responseData.id,
-        references,
-        activity,
-        codeBlocks,
-        generatedFiles,
+        isStreaming: true,
       }])
+
+      await sendAgentResponseStream(
+        {
+          conversationId,
+          agentName: agentName_saved,
+          input: userMessage,
+          knowledgeSourceParams: cleanedParams.length > 0 ? cleanedParams : undefined,
+        },
+        {
+          onTextDelta: (delta) => {
+            streamedText += delta
+            setMessages(prev => prev.map(m =>
+              m.id === msgId ? { ...m, content: streamedText } : m
+            ))
+          },
+          onToolCall: (toolName, serverLabel) => {
+            console.log(`[v2/stream] Tool call: ${toolName} @ ${serverLabel}`)
+            // Show a "searching..." indicator in the message
+            setMessages(prev => prev.map(m =>
+              m.id === msgId ? { ...m, toolCalls: [{ type: 'mcp', name: toolName, server_label: serverLabel }] } : m
+            ))
+          },
+          onSourcesReady: (sources, responseId, usage) => {
+            console.log(`[v2/stream] Sources ready: ${sources.length} sources, responseId=${responseId}`)
+            setMessages(prev => prev.map(m =>
+              m.id === msgId ? {
+                ...m,
+                responseId,
+                references: sources.map((s: any, i: number) => ({
+                  ...s,
+                  id: String(i),
+                  activitySource: 0,
+                })),
+                isStreaming: false,
+              } : m
+            ))
+          },
+          onComplete: () => {
+            console.log('[v2/stream] Stream complete')
+            // Ensure streaming flag is cleared
+            setMessages(prev => prev.map(m =>
+              m.id === msgId ? { ...m, isStreaming: false } : m
+            ))
+          },
+          onError: (error) => {
+            console.error('[v2/stream] Error:', error)
+            setMessages(prev => prev.map(m =>
+              m.id === msgId ? { ...m, content: `Error: ${error.message}`, isStreaming: false } : m
+            ))
+          },
+        }
+      )
 
     } catch (err) {
       console.error('Failed to send message:', err)
