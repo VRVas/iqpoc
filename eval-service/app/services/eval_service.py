@@ -411,11 +411,10 @@ def create_eval_and_run_response_ids(
     data_source_config = {"type": "azure_ai_source", "scenario": "responses"}
 
     testing_criteria = build_testing_criteria(evaluator_names, model_deployment, eval_mode="response_ids")
-    # For response-ID eval, remove data_mapping since schema is auto-inferred
-    # Per MS Learn: azure_ai_responses retrieves the full conversation from the response ID
-    for tc in testing_criteria:
-        if "data_mapping" in tc:
-            del tc["data_mapping"]
+    # For response-ID eval, keep original data_mapping with {{item.*}} references.
+    # The azure_ai_responses data source maps conversation fields to item fields automatically.
+    # NOTE: As of May 2026, Foundry requires data_mapping to be present with explicit field references.
+    # Empty {} no longer works for new eval creation (though portal-created evals with {} still function).
 
     eval_obj = client.evals.create(
         name=name,

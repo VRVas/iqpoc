@@ -489,7 +489,36 @@ export async function sendAgentResponseStream(
 
     while (true) {
       const { done, value } = await reader.read()
-      if (done) break
+      if (done) {
+        // Process any remaining data in the buffer (critical for app.sources event
+        // which is emitted by the server's flush() and may be the last chunk)
+        if (buffer.trim()) {
+          const finalEvents = buffer.split('\n\n')
+          for (const eventBlock of finalEvents) {
+            if (!eventBlock.trim()) continue
+            const lines = eventBlock.split('\n')
+            let eventData = ''
+            for (const line of lines) {
+              if (line.startsWith('data: ')) eventData += line.slice(6)
+            }
+            if (!eventData || eventData === '[DONE]') continue
+            try {
+              const parsed = JSON.parse(eventData)
+              if (parsed.type === 'response.output_text.delta') {
+                callbacks.onTextDelta(parsed.delta || '')
+              }
+              if (parsed.type === 'app.sources') {
+                callbacks.onSourcesReady(
+                  parsed.sources || [],
+                  parsed.responseId || '',
+                  { ...parsed.usage, mcpMeta: parsed.mcpMeta }
+                )
+              }
+            } catch { /* ignore */ }
+          }
+        }
+        break
+      }
 
       buffer += decoder.decode(value, { stream: true })
 
@@ -530,7 +559,11 @@ export async function sendAgentResponseStream(
 
           // Custom app event: sources parsed from MCP outputs
           if (parsed.type === 'app.sources') {
-            callbacks.onSourcesReady(parsed.sources || [], parsed.responseId || '', parsed.usage)
+            callbacks.onSourcesReady(
+              parsed.sources || [],
+              parsed.responseId || '',
+              { ...parsed.usage, mcpMeta: parsed.mcpMeta }
+            )
           }
         } catch { /* ignore partial JSON */ }
       }

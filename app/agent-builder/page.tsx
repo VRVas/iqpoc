@@ -656,6 +656,38 @@ function AgentBuilderPageContent() {
           },
           onSourcesReady: (sources, responseId, usage) => {
             console.log(`[v2/stream] Sources ready: ${sources.length} sources, responseId=${responseId}`)
+
+            // Build synthetic activity records from MCP metadata (for Retrieval Journey display)
+            const activity: any[] = []
+            if (usage?.mcpMeta) {
+              for (const meta of usage.mcpMeta) {
+                if (meta.queries?.length > 0) {
+                  activity.push({
+                    type: 'modelQueryPlanning',
+                    id: activity.length,
+                    inputTokens: 0,
+                    outputTokens: 0,
+                    elapsedMs: 0,
+                  })
+                  const docsPerQuery = meta.documentCount ? Math.ceil(meta.documentCount / meta.queries.length) : 0
+                  for (const query of meta.queries) {
+                    activity.push({
+                      type: 'searchIndex',
+                      id: activity.length,
+                      // Match the fields the RetrievalJourney component reads:
+                      // getActivityQuery() reads searchIndexArguments.search
+                      // doc count reads .count
+                      // source name reads .knowledgeSourceName
+                      searchIndexArguments: { search: query },
+                      knowledgeSourceName: meta.serverLabel || meta.toolName || '',
+                      count: docsPerQuery,
+                      elapsedMs: 0,
+                    })
+                  }
+                }
+              }
+            }
+
             setMessages(prev => prev.map(m =>
               m.id === msgId ? {
                 ...m,
@@ -665,6 +697,7 @@ function AgentBuilderPageContent() {
                   id: String(i),
                   activitySource: 0,
                 })),
+                activity,
                 isStreaming: false,
               } : m
             ))

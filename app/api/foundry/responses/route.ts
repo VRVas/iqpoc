@@ -69,17 +69,37 @@ export async function POST(request: Request) {
     // =========================================================================
     if (streamRequested) {
       const streamPayload = { ...payload, stream: true }
-      const response = await fetch(
-        agentsV2Url('/openai/responses', 'responses'),
-        { method: 'POST', headers, body: JSON.stringify(streamPayload) }
-      )
 
-      if (!response.ok) {
+      // Retry logic: Foundry has ~10% intermittent 500 rate on this tenant.
+      // Retry once after a short delay before surfacing the error.
+      const MAX_RETRIES = 2
+      let response: Response | null = null
+      let lastError = ''
+
+      for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+        response = await fetch(
+          agentsV2Url('/openai/responses', 'responses'),
+          { method: 'POST', headers, body: JSON.stringify(streamPayload) }
+        )
+
+        if (response.ok) break
+
         const errText = await response.text()
-        console.error('[responses/v2/stream] Foundry error:', response.status, errText.slice(0, 300))
+        lastError = errText.slice(0, 500)
+        console.warn(`[responses/v2/stream] Attempt ${attempt}/${MAX_RETRIES} failed: ${response.status} ${errText.slice(0, 200)}`)
+
+        if (attempt < MAX_RETRIES && response.status >= 500) {
+          // Wait before retry on server errors
+          await new Promise(r => setTimeout(r, 2000))
+          continue
+        }
+      }
+
+      if (!response || !response.ok) {
+        console.error('[responses/v2/stream] All retries failed:', lastError.slice(0, 300))
         return NextResponse.json(
-          { error: `Foundry streaming error (${response.status})`, details: errText.slice(0, 500) },
-          { status: response.status }
+          { error: `Foundry streaming error (${response?.status || 500})`, details: lastError },
+          { status: response?.status || 500 }
         )
       }
 
@@ -90,53 +110,83 @@ export async function POST(request: Request) {
       // Create a transform that:
       // 1. Forwards all Foundry SSE events to the client
       // 2. Accumulates MCP call data for source extraction
-      // 3. On response.completed, appends a custom 'app.sources' event
+      // 3. On stream end, appends a custom 'app.sources' event
+      //
+      // CRITICAL: SSE events can span multiple chunks. We must buffer
+      // and split on \n\n (event boundaries), not \n (line boundaries).
       const foundryStream = response.body
       const encoder = new TextEncoder()
       const decoder = new TextDecoder()
 
+      let sseBuffer = '' // Buffer for accumulating partial SSE events
       let mcpOutputs: { name: string; output: string; server_label: string; arguments: any }[] = []
-      let completedResponse: any = null
+      let responseId = ''
+      let responseUsage: any = null
+
+      const processSSEEvent = (eventBlock: string) => {
+        // Parse a complete SSE event block (lines separated by \n, block ends with \n\n)
+        const lines = eventBlock.split('\n')
+        let dataStr = ''
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            dataStr += line.slice(6)
+          }
+        }
+        if (!dataStr || dataStr === '[DONE]') return
+
+        try {
+          const event = JSON.parse(dataStr)
+
+          // Capture responseId from the FIRST event (response.created)
+          if (event.type === 'response.created' && event.response?.id) {
+            responseId = event.response.id
+          }
+
+          // Capture MCP call completions for source extraction
+          if (event.type === 'response.output_item.done') {
+            const item = event.item
+            if (item?.type === 'mcp_call' && item.output) {
+              mcpOutputs.push({
+                name: item.name || '',
+                output: item.output,
+                server_label: item.server_label || '',
+                arguments: item.arguments,
+              })
+            }
+          }
+
+          // Capture usage from the completed response
+          if (event.type === 'response.completed' && event.response) {
+            responseId = event.response.id || responseId
+            responseUsage = event.response.usage || null
+          }
+        } catch {
+          // Partial JSON or non-JSON event — ignore
+        }
+      }
 
       const transformStream = new TransformStream({
         transform(chunk, controller) {
-          // Forward the raw SSE chunk to the client
+          // Forward the raw chunk to the client immediately
           controller.enqueue(chunk)
 
-          // Also parse it to extract MCP data
-          const text = decoder.decode(chunk, { stream: true })
-          const lines = text.split('\n')
+          // Accumulate for SSE parsing
+          sseBuffer += decoder.decode(chunk, { stream: true })
 
-          for (const line of lines) {
-            if (!line.startsWith('data: ')) continue
-            const jsonStr = line.slice(6).trim()
-            if (!jsonStr || jsonStr === '[DONE]') continue
+          // Process complete SSE events (separated by \n\n)
+          const parts = sseBuffer.split('\n\n')
+          // Keep the last part (may be incomplete)
+          sseBuffer = parts.pop() || ''
 
-            try {
-              const event = JSON.parse(jsonStr)
-
-              // Capture MCP call completions for source extraction
-              if (event.type === 'response.mcp_call.completed' || event.type === 'response.output_item.done') {
-                const item = event.item || event
-                if (item.type === 'mcp_call' && item.output) {
-                  mcpOutputs.push({
-                    name: item.name || '',
-                    output: item.output,
-                    server_label: item.server_label || '',
-                    arguments: item.arguments,
-                  })
-                }
-              }
-
-              // Capture the completed response for metadata
-              if (event.type === 'response.completed' && event.response) {
-                completedResponse = event.response
-              }
-            } catch { /* ignore parse errors in partial chunks */ }
+          for (const part of parts) {
+            if (part.trim()) processSSEEvent(part)
           }
         },
         flush(controller) {
-          // After the Foundry stream ends, emit a custom event with parsed sources
+          // Process any remaining buffered data
+          if (sseBuffer.trim()) processSSEEvent(sseBuffer)
+
+          // Emit custom event with parsed sources and responseId
           try {
             const sources: any[] = []
             for (const mcp of mcpOutputs) {
@@ -144,34 +194,44 @@ export async function POST(request: Request) {
               sources.push(...parsed)
             }
 
+            // Build retrieval metadata from MCP calls
+            const mcpMeta = mcpOutputs.map(mcp => {
+              let args: any = {}
+              try { args = typeof mcp.arguments === 'string' ? JSON.parse(mcp.arguments) : (mcp.arguments || {}) } catch {}
+              const docCountMatch = mcp.output.match(/Retrieved (\d+) documents/)
+              return {
+                serverLabel: mcp.server_label,
+                toolName: mcp.name,
+                queries: args.queries || [],
+                documentCount: docCountMatch ? parseInt(docCountMatch[1], 10) : 0,
+              }
+            })
+
             const appData = {
               type: 'app.sources',
               sources,
-              responseId: completedResponse?.id || '',
-              usage: completedResponse?.usage || null,
+              responseId,
+              usage: responseUsage,
+              mcpMeta,
             }
             const sseEvent = `event: app.sources\ndata: ${JSON.stringify(appData)}\n\n`
             controller.enqueue(encoder.encode(sseEvent))
+            console.log(`[responses/v2/stream] Emitted app.sources: ${sources.length} sources, responseId=${responseId}`)
           } catch (err) {
             console.warn('[responses/v2/stream] Source extraction error:', err)
           }
 
           // Fire-and-forget: log to eval service
           try {
-            if (completedResponse && process.env.EVAL_SERVICE_URL) {
-              const respText = (completedResponse.output || [])
-                .filter((o: any) => o.type === 'message' && o.role === 'assistant')
-                .map((o: any) => o.content?.map((c: any) => c.text).join('') || '')
-                .join('\n')
+            if (responseId && process.env.EVAL_SERVICE_URL) {
               fetch(`${process.env.EVAL_SERVICE_URL}/response-log/log`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                  response_id: completedResponse.id,
+                  response_id: responseId,
                   conversation_id: conversationId,
                   agent_name: agentName,
                   user_query: input,
-                  response_text: respText.slice(0, 5000),
                   timestamp: new Date().toISOString(),
                   has_mcp_call: mcpOutputs.length > 0,
                   loop_count: 0,
@@ -209,16 +269,21 @@ export async function POST(request: Request) {
     while (loopCount < MAX_LOOPS) {
       loopCount++
 
-      const response = await fetch(
-        agentsV2Url('/openai/responses', 'responses'),
-        {
-          method: 'POST',
-          headers,
-          body: JSON.stringify(payload),
+      // Retry logic for transient Foundry 500s
+      let response: Response | null = null
+      for (let attempt = 1; attempt <= 2; attempt++) {
+        response = await fetch(
+          agentsV2Url('/openai/responses', 'responses'),
+          { method: 'POST', headers, body: JSON.stringify(payload) }
+        )
+        if (response.ok || response.status < 500) break
+        if (attempt < 2) {
+          console.warn(`[responses/v2] Attempt ${attempt} failed with ${response.status}, retrying...`)
+          await new Promise(r => setTimeout(r, 2000))
         }
-      )
+      }
 
-      const text = await response.text()
+      const text = await response!.text()
       let data: any = {}
       if (text && text.trim().length > 0) {
         try {
@@ -228,7 +293,7 @@ export async function POST(request: Request) {
         }
       }
 
-      if (!response.ok) {
+      if (!response!.ok) {
         const errorMessage = data.error?.message || `Failed to get response (${response.status})`
 
         // Handle MCP tool errors gracefully instead of crashing the conversation.
