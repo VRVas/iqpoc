@@ -6,6 +6,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
 from app.config import get_settings, get_openai_client
+from app.cosmos_repo import safe_get_cosmos_repo
 from app.services.eval_service import (
     create_eval_and_run_dataset,
     create_eval_and_run_agent_target,
@@ -16,6 +17,28 @@ from app.services.eval_service import (
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
+
+
+def _track(eval_id: str, run_id: str, *, category: str, name: str, status: str,
+           agent_name=None, evaluators=None, model_deployment=None) -> None:
+    """Best-effort upsert of a new run into Cosmos. Never raises."""
+    repo = safe_get_cosmos_repo()
+    if repo is None:
+        return
+    try:
+        repo.upsert_eval(
+            eval_id=eval_id,
+            run_id=run_id,
+            type="evaluation",
+            category=category,
+            name=name,
+            agent_name=agent_name,
+            status=status,
+            evaluators=evaluators or [],
+            model_deployment=model_deployment,
+        )
+    except Exception as e:  # pragma: no cover
+        logger.warning("Cosmos upsert failed for run %s: %s", run_id, e)
 
 
 # ---------------------------------------------------------------------------
@@ -129,6 +152,11 @@ async def evaluate_batch(req: BatchEvalRequest):
         else:
             raise HTTPException(400, "Invalid data_source: provide response_ids or inline items")
 
+        _track(result["eval_id"], result["run_id"],
+               category="batch", name=req.name, status=result["status"],
+               agent_name=req.agent_name, evaluators=req.evaluators,
+               model_deployment=model)
+
         return EvalRunResponse(
             eval_id=result["eval_id"],
             run_id=result["run_id"],
@@ -159,6 +187,10 @@ async def evaluate_agent_target(req: AgentTargetRequest):
             model_deployment=model,
             tool_definitions=req.tool_definitions,
         )
+        _track(result["eval_id"], result["run_id"],
+               category="agent_target", name=req.name, status=result["status"],
+               agent_name=req.agent_name, evaluators=req.evaluators,
+               model_deployment=model)
         return EvalRunResponse(
             eval_id=result["eval_id"],
             run_id=result["run_id"],
@@ -184,6 +216,9 @@ async def evaluate_by_response_ids(req: ResponseIdsRequest):
             evaluator_names=req.evaluators,
             model_deployment=model,
         )
+        _track(result["eval_id"], result["run_id"],
+               category="by_response_ids", name=req.name, status=result["status"],
+               evaluators=req.evaluators, model_deployment=model)
         return EvalRunResponse(
             eval_id=result["eval_id"],
             run_id=result["run_id"],
@@ -212,6 +247,10 @@ async def evaluate_synthetic(req: SyntheticEvalRequest):
             model_deployment=model,
             tool_definitions=req.tool_definitions,
         )
+        _track(result["eval_id"], result["run_id"],
+               category="synthetic", name=req.name, status=result["status"],
+               agent_name=req.agent_name, evaluators=req.evaluators,
+               model_deployment=model)
         return EvalRunResponse(
             eval_id=result["eval_id"],
             run_id=result["run_id"],
@@ -309,6 +348,10 @@ async def evaluate_model_target(req: ModelTargetRequest):
             data_source=data_source,
         )
 
+        _track(eval_obj.id, eval_run.id,
+               category="model_target", name=req.name, status=eval_run.status,
+               evaluators=req.evaluators, model_deployment=judge_model)
+
         return EvalRunResponse(
             eval_id=eval_obj.id,
             run_id=eval_run.id,
@@ -342,6 +385,10 @@ async def evaluate_single(req: SingleEvalRequest):
             evaluator_names=req.evaluators,
             model_deployment=model,
         )
+
+        _track(result["eval_id"], result["run_id"],
+               category="single", name="Single evaluation", status=result["status"],
+               evaluators=req.evaluators, model_deployment=model)
 
         # Poll for completion (synchronous — wait up to 60s)
         final = poll_eval_run(result["eval_id"], result["run_id"], timeout_seconds=60)

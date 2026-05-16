@@ -1,5 +1,6 @@
 """Evaluation Service — FastAPI application."""
 
+import asyncio
 import logging
 import os
 from contextlib import asynccontextmanager
@@ -7,6 +8,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_settings
+from app.poller import poller_loop
 from app.routers import health, evaluate, evaluators, continuous, red_team, responses, custom_evaluators, history, datasets, scheduled
 
 settings = get_settings()
@@ -44,8 +46,26 @@ async def lifespan(app: FastAPI):
     logger.info("Eval service starting (v%s)", settings.VERSION)
     logger.info("Foundry endpoint: %s", settings.FOUNDRY_PROJECT_ENDPOINT)
     logger.info("Model deployment: %s", settings.FOUNDRY_MODEL_DEPLOYMENT)
-    yield
-    logger.info("Eval service shutting down")
+
+    # Start background poller — refreshes non-terminal eval runs from Foundry.
+    # Disable with EVAL_POLLER_DISABLED=1 (useful for local dev).
+    poller_task: asyncio.Task | None = None
+    if os.environ.get("EVAL_POLLER_DISABLED") != "1":
+        poller_task = asyncio.create_task(poller_loop(), name="eval-poller")
+        logger.info("Eval poller task scheduled")
+    else:
+        logger.info("Eval poller disabled via EVAL_POLLER_DISABLED=1")
+
+    try:
+        yield
+    finally:
+        if poller_task is not None:
+            poller_task.cancel()
+            try:
+                await poller_task
+            except (asyncio.CancelledError, Exception):
+                pass
+        logger.info("Eval service shutting down")
 
 
 app = FastAPI(

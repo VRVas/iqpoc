@@ -23,13 +23,16 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
 from app.config import get_openai_client, get_project_client, get_settings
+from app.cosmos_repo import safe_get_cosmos_repo
 from app.services.eval_service import poll_eval_run
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
-# Red team run registry — tracks runs since Foundry's evals.list() excludes them
+# Red team runs are persisted to Cosmos (container `eval-results`,
+# type="red_team") because Foundry's `client.evals.list()` excludes them.
+# An in-memory fallback list keeps the service usable if Cosmos is down.
 # ---------------------------------------------------------------------------
 _red_team_runs: list[dict] = []
 
@@ -148,8 +151,8 @@ async def run_red_team(req: RedTeamRequest):
         )
         logger.info("Created red team run: %s (status: %s)", eval_run.id, eval_run.status)
 
-        # Track the run locally since evals.list() won't return red team evals
-        _red_team_runs.append({
+        # Track the run in Cosmos (and in-memory as a degraded fallback)
+        run_meta = {
             "eval_id": eval_obj.id,
             "run_id": eval_run.id,
             "name": req.name,
@@ -159,7 +162,28 @@ async def run_red_team(req: RedTeamRequest):
             "attack_strategies": req.attack_strategies,
             "num_turns": req.num_turns,
             "taxonomy_id": taxonomy_file_id,
-        })
+        }
+        _red_team_runs.append(run_meta)
+
+        repo = safe_get_cosmos_repo()
+        if repo is not None:
+            try:
+                repo.upsert_eval(
+                    eval_id=eval_obj.id,
+                    run_id=eval_run.id,
+                    type="red_team",
+                    category="red_team",
+                    name=req.name,
+                    agent_name=req.agent_name,
+                    status=eval_run.status or "queued",
+                    evaluators=req.evaluators,
+                    model_deployment=model,
+                    attack_strategies=req.attack_strategies,
+                    num_turns=req.num_turns,
+                    taxonomy_id=taxonomy_file_id,
+                )
+            except Exception as e:
+                logger.warning("Cosmos upsert failed for red team run %s: %s", eval_run.id, e)
 
         return RedTeamResponse(
             eval_id=eval_obj.id,
@@ -192,14 +216,38 @@ async def get_red_team_status(run_id: str, eval_id: str):
 async def list_red_team_runs():
     """List all tracked red team runs.
 
-    Since Foundry's evals.list() doesn't return red team evals (they live
-    in a separate 'redteam' namespace), we track them locally on creation.
-    This endpoint returns the tracked runs with their current status.
+    Reads from Cosmos (`type = "red_team"`). Falls back to the in-memory
+    registry if Cosmos is unavailable. Live status comes from the background
+    poller; this endpoint does not block on Foundry.
     """
+    repo = safe_get_cosmos_repo()
+    if repo is not None:
+        try:
+            items, _ = repo.list_runs(limit=200, offset=0, type="red_team")
+            results = [
+                {
+                    "eval_id": it.get("evalId"),
+                    "run_id": it.get("runId"),
+                    "name": it.get("name"),
+                    "agent_name": it.get("agentName", ""),
+                    "type": "red_team",
+                    "status": it.get("status", "unknown"),
+                    "created_at": it.get("createdAt"),
+                    "attack_strategies": it.get("attackStrategies") or [],
+                    "num_turns": it.get("numTurns") or 0,
+                    "result_counts": it.get("resultCounts"),
+                    "report_url": it.get("reportUrl"),
+                }
+                for it in items
+            ]
+            return {"runs": results, "total": len(results)}
+        except Exception as e:
+            logger.warning("Cosmos red team list failed, falling back to in-memory: %s", e)
+
+    # Fallback path — reads from in-memory list and refreshes via Foundry.
     results = []
     client = None
-
-    for run_meta in reversed(_red_team_runs):  # newest first
+    for run_meta in reversed(_red_team_runs):
         run_data = {
             "eval_id": run_meta["eval_id"],
             "run_id": run_meta["run_id"],
@@ -213,8 +261,6 @@ async def list_red_team_runs():
             "result_counts": None,
             "report_url": None,
         }
-
-        # Try to get latest status from Foundry
         try:
             if client is None:
                 client = get_openai_client()
@@ -230,9 +276,7 @@ async def list_red_team_runs():
                 }
         except Exception as e:
             logger.warning("Could not refresh status for red team run %s: %s", run_meta["run_id"], e)
-
         results.append(run_data)
-
     return {"runs": results, "total": len(results)}
 
 
@@ -263,5 +307,20 @@ async def register_red_team_run(
         "attack_strategies": [],
         "num_turns": 0,
     })
+
+    repo = safe_get_cosmos_repo()
+    if repo is not None:
+        try:
+            repo.upsert_eval(
+                eval_id=eval_id,
+                run_id=run_id,
+                type="red_team",
+                category="red_team",
+                name=name,
+                agent_name=agent_name,
+                status="unknown",
+            )
+        except Exception as e:
+            logger.warning("Cosmos upsert failed for register %s: %s", run_id, e)
 
     return {"status": "registered", "eval_id": eval_id, "run_id": run_id}

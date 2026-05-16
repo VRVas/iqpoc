@@ -13,6 +13,7 @@ from typing import Optional
 from fastapi import APIRouter, HTTPException
 
 from app.config import get_openai_client
+from app.cosmos_repo import safe_get_cosmos_repo
 
 router = APIRouter()
 logger = logging.getLogger("app")
@@ -106,16 +107,87 @@ async def list_eval_runs(eval_id: str, limit: int = 20, order: str = "desc"):
 
 
 @router.get("/recent-runs")
-async def list_recent_runs(limit: int = 20):
-    """List the most recent evaluation AND red team runs.
+async def list_recent_runs(
+    limit: int = 50,
+    offset: int = 0,
+    type: Optional[str] = None,
+    category: Optional[str] = None,
+    agent_name: Optional[str] = None,
+    status: Optional[str] = None,
+    date_from: Optional[int] = None,
+    date_to: Optional[int] = None,
+    order_by: str = "createdAt",
+    order: str = "desc",
+):
+    """List recent evaluation + red team runs from Cosmos with pagination.
 
-    Merges standard evals from client.evals.list() with red team runs
-    from the local registry (since Foundry's evals.list() excludes red team evals).
+    Server-side filtering, sorting, and paging via Cosmos SQL. Falls back to
+    the legacy Foundry-direct merge if Cosmos is unavailable.
+
+    Ref: https://learn.microsoft.com/en-us/azure/cosmos-db/nosql/query/offset-limit
     """
+    repo = safe_get_cosmos_repo()
+    if repo is not None:
+        try:
+            items, total = repo.list_runs(
+                limit=min(max(int(limit), 1), 500),
+                offset=max(int(offset), 0),
+                type=type,
+                category=category,
+                agent_name=agent_name,
+                status=status,
+                date_from=date_from,
+                date_to=date_to,
+                order_by=order_by,
+                order=order,
+            )
+            runs = [_doc_to_run(it) for it in items]
+            return {
+                "runs": runs,
+                "total": total,
+                "limit": limit,
+                "offset": offset,
+                "source": "cosmos",
+            }
+        except Exception as e:
+            logger.warning("Cosmos query failed, falling back to Foundry: %s", e)
+
+    # ------------------------------------------------------------------
+    # Fallback path — legacy merge of Foundry evals + in-memory red team
+    # ------------------------------------------------------------------
+    return await _legacy_recent_runs(limit)
+
+
+def _doc_to_run(doc: dict) -> dict:
+    """Map a Cosmos document to the public run shape consumed by the UI."""
+    return {
+        "id": doc.get("runId") or doc.get("id"),
+        "eval_id": doc.get("evalId"),
+        "eval_name": doc.get("name", ""),
+        "name": doc.get("name", ""),
+        "type": doc.get("type", "evaluation"),
+        "category": doc.get("category"),
+        "agent_name": doc.get("agentName"),
+        "status": doc.get("status", "unknown"),
+        "created_at": doc.get("createdAt"),
+        "updated_at": doc.get("updatedAt"),
+        "completed_at": doc.get("completedAt"),
+        "evaluators": doc.get("evaluators") or [],
+        "model_deployment": doc.get("modelDeployment"),
+        "result_counts": doc.get("resultCounts"),
+        "metrics": doc.get("metrics"),
+        "report_url": doc.get("reportUrl"),
+        "attack_strategies": doc.get("attackStrategies"),
+        "num_turns": doc.get("numTurns"),
+        "taxonomy_id": doc.get("taxonomyId"),
+        "error": doc.get("error"),
+    }
+
+
+async def _legacy_recent_runs(limit: int) -> dict:
+    """Original implementation kept as a fallback when Cosmos is unreachable."""
     try:
         client = get_openai_client()
-
-        # Get recent evaluations
         evals_page = client.evals.list(limit=10, order="desc")
 
         all_runs = []
@@ -147,8 +219,6 @@ async def list_recent_runs(limit: int = 20):
             except Exception as e:
                 logger.warning("Failed to get runs for eval %s: %s", ev.id, e)
 
-        # Merge red team runs from the local registry
-        # (Foundry's evals.list() doesn't return red team evals — they're in a separate namespace)
         try:
             from app.routers.red_team import _red_team_runs
             for rt in _red_team_runs:
@@ -163,30 +233,14 @@ async def list_recent_runs(limit: int = 20):
                     "report_url": None,
                     "result_counts": None,
                 }
-                # Try to get fresh status
-                try:
-                    run = client.evals.runs.retrieve(run_id=rt["run_id"], eval_id=rt["eval_id"])
-                    rt_data["status"] = getattr(run, "status", "unknown")
-                    rt_data["report_url"] = getattr(run, "report_url", None)
-                    if hasattr(run, "result_counts") and run.result_counts:
-                        rt_data["result_counts"] = {
-                            "total": getattr(run.result_counts, "total", 0),
-                            "passed": getattr(run.result_counts, "passed", 0),
-                            "failed": getattr(run.result_counts, "failed", 0),
-                            "errored": getattr(run.result_counts, "errored", 0),
-                        }
-                except Exception as e:
-                    logger.warning("Could not refresh red team run %s: %s", rt["run_id"], e)
                 all_runs.append(rt_data)
         except Exception as e:
             logger.warning("Could not merge red team runs: %s", e)
 
-        # Sort by created_at descending and limit
         all_runs.sort(key=lambda r: r.get("created_at") or 0, reverse=True)
         all_runs = all_runs[:limit]
-
-        return {"runs": all_runs, "total": len(all_runs)}
+        return {"runs": all_runs, "total": len(all_runs), "source": "foundry-fallback"}
 
     except Exception as e:
-        logger.exception("Failed to list recent runs")
+        logger.exception("Failed to list recent runs (legacy path)")
         raise HTTPException(500, str(e))

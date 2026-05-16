@@ -11,6 +11,11 @@ import {
   DismissCircle20Filled,
   Shield20Regular,
   DataBarVertical20Regular,
+  ArrowSort20Regular,
+  CalendarLtr20Regular,
+  ChevronLeft20Regular,
+  ChevronRight20Regular,
+  Dismiss20Regular,
 } from '@fluentui/react-icons'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
@@ -32,6 +37,7 @@ import { PageHeader } from '@/components/shared/page-header'
  */
 
 type Tab = 'evaluations' | 'red-team'
+type SortBy = 'volume' | 'latest'
 
 interface EvalRun {
   id: string
@@ -53,121 +59,125 @@ interface EvalRun {
 export default function ResultsIndexPage() {
   const router = useRouter()
   const [tab, setTab] = useState<Tab>('evaluations')
-  const [allRuns, setAllRuns] = useState<EvalRun[]>([])
+  const [runs, setRuns] = useState<EvalRun[]>([])
+  const [total, setTotal] = useState(0)
+  const [evalCount, setEvalCount] = useState(0)
+  const [redTeamCount, setRedTeamCount] = useState(0)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
   const [evalId, setEvalId] = useState('')
   const [runId, setRunId] = useState('')
 
-  // ---------------------------------------------------------------------------
-  // Red team run persistence via localStorage
-  // Foundry's evals.list() doesn't return red team evals (separate namespace).
-  // We store known red team run IDs in localStorage and fetch their status
-  // directly from the Foundry API on each load.
-  // ---------------------------------------------------------------------------
-  const RT_STORAGE_KEY = 'foundry-iq-red-team-runs'
-  const RT_BLOB_KEY = 'red-team-runs'
+  // Sorting, pagination, and date filter — all driven server-side now
+  const [sortBy, setSortBy] = useState<SortBy>('latest')
+  const [page, setPage] = useState(1)
+  const [dateFrom, setDateFrom] = useState('')
+  const [dateTo, setDateTo] = useState('')
+  const PAGE_SIZE = 10
 
-  function getStoredRedTeamRuns(): Array<{eval_id: string; run_id: string; name: string}> {
-    try {
-      return JSON.parse(localStorage.getItem(RT_STORAGE_KEY) || '[]')
-    } catch { return [] }
+  // ---------------------------------------------------------------------------
+  // Backfill seeds — historical red team runs that pre-date Cosmos persistence.
+  // These are POSTed once on mount to /api/eval/red-team/register so the
+  // backend has them in Cosmos. After backfill the seeds are a no-op.
+  // ---------------------------------------------------------------------------
+  const SEED_RED_TEAM_RUNS: Array<{eval_id: string; run_id: string; name: string}> = [
+    {
+      eval_id: 'eval_2b986ef7d2ab42c28b1901650f253cec',
+      run_id: 'evalrun_431e6d9084854b899c3ea439d085297c',
+      name: 'Red Team - agent-1774946608254 - 2026-04-08T17:46',
+    },
+    {
+      eval_id: 'eval_399d9a968902457bb94772327370754a',
+      run_id: 'evalrun_30ae05c7ddab400dadf9458dec5a96ae',
+      name: 'Red Team - cc-general-operator - 2026-04-25',
+    },
+  ]
+
+  async function seedRedTeamRuns() {
+    await Promise.all(SEED_RED_TEAM_RUNS.map(async r => {
+      try {
+        const qs = new URLSearchParams({
+          eval_id: r.eval_id,
+          run_id: r.run_id,
+          name: r.name,
+          agent_name: '',
+        }).toString()
+        await fetch(`/api/eval/red-team/register?${qs}`, { method: 'POST' })
+      } catch { /* best effort */ }
+    }))
   }
 
-  function storeRedTeamRunLocal(evalId: string, runId: string, name: string) {
-    const existing = getStoredRedTeamRuns()
-    if (!existing.some(r => r.run_id === runId)) {
-      existing.push({ eval_id: evalId, run_id: runId, name })
-      localStorage.setItem(RT_STORAGE_KEY, JSON.stringify(existing))
+  function buildQuery(type: 'evaluation' | 'red_team', sample: boolean): string {
+    const params = new URLSearchParams({ action: 'recent-runs', type })
+    if (sample) {
+      params.set('limit', '1')
+      params.set('offset', '0')
+      return params.toString()
     }
-  }
-
-  // Sync red team runs to/from blob storage (durable persistence)
-  async function syncRedTeamRunsFromBlob() {
-    try {
-      const resp = await fetch(`/api/eval/insights/${RT_BLOB_KEY}`)
-      if (!resp.ok) return
-      const data = await resp.json()
-      const blobRuns: Array<{eval_id: string; run_id: string; name: string}> = data.runs || []
-      // Merge blob runs into localStorage (blob is source of truth)
-      for (const run of blobRuns) {
-        storeRedTeamRunLocal(run.eval_id, run.run_id, run.name)
-      }
-    } catch { /* blob not available */ }
-  }
-
-  async function saveRedTeamRunToBlob(evalId: string, runId: string, name: string) {
-    storeRedTeamRunLocal(evalId, runId, name)
-    try {
-      const allRuns = getStoredRedTeamRuns()
-      await fetch(`/api/eval/insights/${RT_BLOB_KEY}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ runs: allRuns }),
-      })
-    } catch { /* best effort */ }
+    params.set('limit', String(PAGE_SIZE))
+    params.set('offset', String((page - 1) * PAGE_SIZE))
+    params.set('order', 'desc')
+    params.set('order_by', sortBy === 'volume' ? 'resultCounts.total' : 'createdAt')
+    if (dateFrom) {
+      const fromTs = Math.floor(new Date(dateFrom + 'T00:00:00').getTime() / 1000)
+      params.set('date_from', String(fromTs))
+    }
+    if (dateTo) {
+      const toTs = Math.floor(new Date(dateTo + 'T23:59:59').getTime() / 1000)
+      params.set('date_to', String(toTs))
+    }
+    return params.toString()
   }
 
   const fetchHistory = () => {
     setLoading(true)
     setError('')
 
-    // Fetch eval runs from history API
-    const evalPromise = fetch('/api/eval/history?action=recent-runs&limit=50')
+    const activeType = tab === 'red-team' ? 'red_team' : 'evaluation'
+    const pageFetch = fetch(`/api/eval/history?${buildQuery(activeType, false)}`)
       .then(r => r.json())
-      .catch(() => ({ runs: [] }))
+      .catch(() => ({ runs: [], total: 0 }))
+    // Tab counter queries — small payload, just need `total`
+    const evalCountFetch = fetch(`/api/eval/history?${buildQuery('evaluation', true)}`)
+      .then(r => r.json())
+      .catch(() => ({ total: 0 }))
+    const rtCountFetch = fetch(`/api/eval/history?${buildQuery('red_team', true)}`)
+      .then(r => r.json())
+      .catch(() => ({ total: 0 }))
 
-    // Fetch red team run status for each stored run ID
-    const storedRtRuns = getStoredRedTeamRuns()
-    const rtPromises = storedRtRuns.map(rt =>
-      fetch(`/api/eval/status/${rt.run_id}?eval_id=${rt.eval_id}`)
-        .then(r => r.json())
-        .then(data => ({
-          id: rt.run_id,
-          eval_id: rt.eval_id,
-          eval_name: rt.name,
-          type: 'red_team' as const,
-          name: rt.name,
-          status: data.status || 'unknown',
-          created_at: undefined as number | undefined,
-          report_url: data.report_url,
-          result_counts: data.result_counts,
-        }))
-        .catch(() => null)
-    )
-
-    Promise.all([evalPromise, ...rtPromises])
-      .then(([evalData, ...rtResults]) => {
-        if (evalData.error) throw new Error(evalData.error)
-        const evalRuns = (evalData.runs || []).map((r: any) => ({ ...r, type: r.type || 'evaluation' }))
-        const rtRuns = (rtResults.filter(Boolean) as EvalRun[])
-        setAllRuns([...evalRuns, ...rtRuns].sort((a, b) => (b.created_at || 0) - (a.created_at || 0)))
+    Promise.all([pageFetch, evalCountFetch, rtCountFetch])
+      .then(([pageData, evalData, rtData]) => {
+        if (pageData.error) throw new Error(pageData.error)
+        setRuns(pageData.runs || [])
+        setTotal(pageData.total ?? (pageData.runs?.length || 0))
+        setEvalCount(evalData.total ?? 0)
+        setRedTeamCount(rtData.total ?? 0)
       })
       .catch(err => setError(err.message))
       .finally(() => setLoading(false))
   }
 
-  // Seed the existing red team run on first mount + sync from blob
+  // Backfill seeds once, then load the page
   useEffect(() => {
-    // Register the known red team runs so they persist across refreshes
-    storeRedTeamRunLocal(
-      'eval_2b986ef7d2ab42c28b1901650f253cec',
-      'evalrun_431e6d9084854b899c3ea439d085297c',
-      'Red Team - agent-1774946608254 - 2026-04-08T17:46'
-    )
-    storeRedTeamRunLocal(
-      'eval_399d9a968902457bb94772327370754a',
-      'evalrun_30ae05c7ddab400dadf9458dec5a96ae',
-      'Red Team - cc-general-operator - 2026-04-25'
-    )
-    // Sync from blob (picks up runs from other sessions/browsers)
-    syncRedTeamRunsFromBlob().then(() => fetchHistory())
+    seedRedTeamRuns().then(() => fetchHistory())
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  const evalRuns = allRuns.filter(r => r.type !== 'red_team')
-  const redTeamRuns = allRuns.filter(r => r.type === 'red_team')
-  const currentRuns = tab === 'evaluations' ? evalRuns : redTeamRuns
+  // Re-fetch when filters / paging / sort / tab change
+  useEffect(() => {
+    fetchHistory()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab, sortBy, page, dateFrom, dateTo])
+
+  // Server already sorts + paginates; just use what the API returned.
+  const currentRuns = runs
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE))
+  const safePage = Math.min(page, totalPages)
+  const hasDateFilter = dateFrom || dateTo
+
+  // Reset page when tab, sort, or filters change
+  useEffect(() => { setPage(1) }, [tab, sortBy, dateFrom, dateTo])
 
   const handleLookup = () => {
     if (evalId && runId) {
@@ -217,7 +227,7 @@ export default function ResultsIndexPage() {
         >
           <DataBarVertical20Regular className="h-4 w-4" />
           Evaluations
-          {!loading && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-bg-secondary text-fg-subtle">{evalRuns.length}</span>}
+          {!loading && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-bg-secondary text-fg-subtle">{evalCount}</span>}
         </button>
         <button
           onClick={() => setTab('red-team')}
@@ -230,15 +240,84 @@ export default function ResultsIndexPage() {
         >
           <Shield20Regular className="h-4 w-4" />
           Red Teaming
-          {!loading && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-bg-secondary text-fg-subtle">{redTeamRuns.length}</span>}
+          {!loading && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-bg-secondary text-fg-subtle">{redTeamCount}</span>}
         </button>
       </div>
 
       {/* Run List */}
       <div className="rounded-2xl border border-stroke-divider bg-bg-card p-6">
-        <h3 className="text-sm font-semibold text-fg-default mb-4">
-          {tab === 'evaluations' ? 'Recent Evaluation Runs' : 'Recent Red Team Scans'}
-        </h3>
+        {/* Header with title, sort, and date filter */}
+        <div className="flex flex-col gap-3 mb-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <h3 className="text-sm font-semibold text-fg-default">
+                {tab === 'evaluations' ? 'Evaluation Runs' : 'Red Team Scans'}
+              </h3>
+              {!loading && (
+                <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-bg-secondary text-fg-subtle">
+                  {total}
+                </span>
+              )}
+            </div>
+            <div className="flex items-center gap-2">
+              {/* Sort toggle */}
+              <div className="flex items-center gap-1 rounded-lg border border-stroke-card bg-bg-secondary p-0.5">
+                <button
+                  onClick={() => setSortBy('volume')}
+                  className={cn(
+                    'flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-medium transition-all',
+                    sortBy === 'volume'
+                      ? 'bg-bg-card shadow-sm text-fg-default border border-stroke-card'
+                      : 'text-fg-muted hover:text-fg-default'
+                  )}
+                >
+                  <ArrowSort20Regular className="h-3 w-3" />
+                  Volume
+                </button>
+                <button
+                  onClick={() => setSortBy('latest')}
+                  className={cn(
+                    'flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-medium transition-all',
+                    sortBy === 'latest'
+                      ? 'bg-bg-card shadow-sm text-fg-default border border-stroke-card'
+                      : 'text-fg-muted hover:text-fg-default'
+                  )}
+                >
+                  <ArrowSort20Regular className="h-3 w-3" />
+                  Latest
+                </button>
+              </div>
+              {/* Date filter */}
+              <div className="flex items-center gap-1.5">
+                <CalendarLtr20Regular className="h-3.5 w-3.5 text-fg-subtle" />
+                <input
+                  type="date"
+                  value={dateFrom}
+                  onChange={e => setDateFrom(e.target.value)}
+                  className="rounded-lg border border-stroke-card bg-bg-secondary px-2 py-1 text-[11px] text-fg-default w-[120px]"
+                  title="From date"
+                />
+                <span className="text-[10px] text-fg-subtle">–</span>
+                <input
+                  type="date"
+                  value={dateTo}
+                  onChange={e => setDateTo(e.target.value)}
+                  className="rounded-lg border border-stroke-card bg-bg-secondary px-2 py-1 text-[11px] text-fg-default w-[120px]"
+                  title="To date"
+                />
+                {hasDateFilter && (
+                  <button
+                    onClick={() => { setDateFrom(''); setDateTo('') }}
+                    className="p-0.5 rounded text-fg-subtle hover:text-fg-default transition-colors"
+                    title="Clear date filter"
+                  >
+                    <Dismiss20Regular className="h-3.5 w-3.5" />
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
 
         {loading ? (
           <div className="animate-pulse space-y-3">
@@ -265,63 +344,122 @@ export default function ResultsIndexPage() {
             )}
           </div>
         ) : (
-          <div className="space-y-2">
-            {currentRuns.map(run => {
-              const isRedTeam = run.type === 'red_team'
-              const passRate = run.result_counts
-                ? run.result_counts.total > 0
-                  ? ((run.result_counts.passed / run.result_counts.total) * 100).toFixed(0)
-                  : '0'
-                : null
-              const createdDate = run.created_at
-                ? new Date(run.created_at * 1000).toLocaleString()
-                : ''
+          <>
+            <div className="space-y-2">
+              {currentRuns.map(run => {
+                const isRedTeam = run.type === 'red_team'
+                const passRate = run.result_counts
+                  ? run.result_counts.total > 0
+                    ? ((run.result_counts.passed / run.result_counts.total) * 100).toFixed(0)
+                    : '0'
+                  : null
+                const createdDate = run.created_at
+                  ? new Date(run.created_at * 1000).toLocaleString()
+                  : ''
 
-              return (
-                <button
-                  key={`${run.eval_id}-${run.id}`}
-                  onClick={() => router.push(`/evaluations/results/${run.id}?eval_id=${run.eval_id}&edit=admin`)}
-                  className="w-full flex items-center gap-3 px-4 py-3 rounded-xl border border-stroke-card hover:border-stroke-accent bg-bg-secondary/50 hover:bg-bg-secondary transition-all text-left group"
-                >
-                  {isRedTeam
-                    ? <Shield20Regular className={cn("h-4 w-4 flex-shrink-0", run.status === 'completed' ? 'text-green-500' : run.status === 'failed' ? 'text-red-500' : 'text-amber-500')} />
-                    : statusIcon(run.status)
-                  }
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm font-medium text-fg-default truncate">
-                        {run.eval_name || run.name || run.id.slice(0, 20)}
-                      </span>
-                      {isRedTeam && (
-                        <span className="text-[9px] px-1.5 py-0.5 rounded bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-300 font-medium">RED TEAM</span>
-                      )}
-                      <span className={cn('text-[10px] font-medium', statusColor(run.status))}>
-                        {run.status}
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-3 mt-0.5">
-                      {createdDate && <span className="text-[10px] text-fg-subtle">{createdDate}</span>}
-                      <span className="text-[10px] text-fg-subtle font-mono">{run.id.slice(0, 16)}...</span>
-                    </div>
-                  </div>
-                  {run.result_counts && (
-                    <div className="flex items-center gap-3 flex-shrink-0">
-                      <div className="text-right">
-                        <span className="text-sm font-bold text-fg-default">{passRate}%</span>
-                        <span className="text-[10px] text-fg-muted block">{isRedTeam ? 'defended' : 'pass rate'}</span>
+                return (
+                  <button
+                    key={`${run.eval_id}-${run.id}`}
+                    onClick={() => router.push(`/evaluations/results/${run.id}?eval_id=${run.eval_id}&edit=admin`)}
+                    className="w-full flex items-center gap-3 px-4 py-3 rounded-xl border border-stroke-card hover:border-stroke-accent bg-bg-secondary/50 hover:bg-bg-secondary transition-all text-left group"
+                  >
+                    {isRedTeam
+                      ? <Shield20Regular className={cn("h-4 w-4 flex-shrink-0", run.status === 'completed' ? 'text-green-500' : run.status === 'failed' ? 'text-red-500' : 'text-amber-500')} />
+                      : statusIcon(run.status)
+                    }
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-medium text-fg-default truncate">
+                          {run.eval_name || run.name || run.id.slice(0, 20)}
+                        </span>
+                        {isRedTeam && (
+                          <span className="text-[9px] px-1.5 py-0.5 rounded bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-300 font-medium">RED TEAM</span>
+                        )}
+                        <span className={cn('text-[10px] font-medium', statusColor(run.status))}>
+                          {run.status}
+                        </span>
                       </div>
-                      <div className="flex gap-1.5 text-[10px]">
-                        <span className="text-green-600">{run.result_counts.passed}{isRedTeam ? 'D' : 'P'}</span>
-                        <span className="text-red-600">{run.result_counts.failed}{isRedTeam ? 'B' : 'F'}</span>
-                        {run.result_counts.errored > 0 && <span className="text-amber-600">{run.result_counts.errored}E</span>}
+                      <div className="flex items-center gap-3 mt-0.5">
+                        {createdDate && <span className="text-[10px] text-fg-subtle">{createdDate}</span>}
+                        <span className="text-[10px] text-fg-subtle font-mono">{run.id.slice(0, 16)}...</span>
+                        {run.result_counts && (
+                          <span className="text-[10px] text-fg-subtle">{run.result_counts.total} queries</span>
+                        )}
                       </div>
                     </div>
-                  )}
-                  <ArrowRight20Regular className="h-4 w-4 text-fg-subtle opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" />
-                </button>
-              )
-            })}
-          </div>
+                    {run.result_counts && (
+                      <div className="flex items-center gap-3 flex-shrink-0">
+                        <div className="text-right">
+                          <span className="text-sm font-bold text-fg-default">{passRate}%</span>
+                          <span className="text-[10px] text-fg-muted block">{isRedTeam ? 'defended' : 'pass rate'}</span>
+                        </div>
+                        <div className="flex gap-1.5 text-[10px]">
+                          <span className="text-green-600">{run.result_counts.passed}{isRedTeam ? 'D' : 'P'}</span>
+                          <span className="text-red-600">{run.result_counts.failed}{isRedTeam ? 'B' : 'F'}</span>
+                          {run.result_counts.errored > 0 && <span className="text-amber-600">{run.result_counts.errored}E</span>}
+                        </div>
+                      </div>
+                    )}
+                    <ArrowRight20Regular className="h-4 w-4 text-fg-subtle opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" />
+                  </button>
+                )
+              })}
+            </div>
+
+            {/* Pagination */}
+            {totalPages > 1 && (
+              <div className="flex items-center justify-between mt-4 pt-3 border-t border-stroke-divider">
+                <span className="text-[11px] text-fg-muted">
+                  Showing {(safePage - 1) * PAGE_SIZE + 1}–{Math.min(safePage * PAGE_SIZE, total)} of {total}
+                </span>
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={() => setPage(p => Math.max(1, p - 1))}
+                    disabled={safePage <= 1}
+                    className={cn(
+                      'p-1 rounded-lg transition-colors',
+                      safePage <= 1 ? 'text-fg-subtle cursor-not-allowed' : 'text-fg-muted hover:text-fg-default hover:bg-bg-secondary'
+                    )}
+                  >
+                    <ChevronLeft20Regular className="h-4 w-4" />
+                  </button>
+                  {Array.from({ length: totalPages }, (_, i) => i + 1).map(p => {
+                    // Show first, last, current, and neighbors; ellipsis for gaps
+                    const show = p === 1 || p === totalPages || Math.abs(p - safePage) <= 1
+                    const prevShow = p > 1 && (p - 1 === 1 || p - 1 === totalPages || Math.abs(p - 1 - safePage) <= 1)
+                    if (!show) {
+                      if (prevShow) return <span key={p} className="text-[10px] text-fg-subtle px-1">…</span>
+                      return null
+                    }
+                    return (
+                      <button
+                        key={p}
+                        onClick={() => setPage(p)}
+                        className={cn(
+                          'min-w-[28px] h-7 rounded-lg text-[11px] font-medium transition-colors',
+                          p === safePage
+                            ? 'bg-bg-card border border-stroke-card shadow-sm text-fg-default'
+                            : 'text-fg-muted hover:text-fg-default hover:bg-bg-secondary'
+                        )}
+                      >
+                        {p}
+                      </button>
+                    )
+                  })}
+                  <button
+                    onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                    disabled={safePage >= totalPages}
+                    className={cn(
+                      'p-1 rounded-lg transition-colors',
+                      safePage >= totalPages ? 'text-fg-subtle cursor-not-allowed' : 'text-fg-muted hover:text-fg-default hover:bg-bg-secondary'
+                    )}
+                  >
+                    <ChevronRight20Regular className="h-4 w-4" />
+                  </button>
+                </div>
+              </div>
+            )}
+          </>
         )}
       </div>
 
