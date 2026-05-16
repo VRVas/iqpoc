@@ -7,7 +7,7 @@ Agentic RAG demo with Foundry IQ Knowledge Bases and Microsoft Foundry Agent Ser
 
 ## Deploy
 
-[![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2FVRVas%2Fiqpoc%2Fmain%2Finfra%2Fmain.json)
+[![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2FVRVas%2Fiqpoc%2Fmain%2Finfra%2Fmain-legacy.json)
 [![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2FVRVas%2Fiqpoc)
 
 ## Quick Start

@@ -25,20 +25,35 @@ param vnetEnvName string = 'cae-storage-proxy'
 @description('Resource ID of the subnet delegated to Microsoft.App/environments (used by the VNet env only).')
 param caeSubnetId string
 
-@description('Customer ID (workspaceId) of the Log Analytics workspace receiving stdout/stderr logs.')
-param logAnalyticsCustomerId string
+@description('Name of the Log Analytics workspace receiving stdout/stderr logs. The module reads its customerId and sharedKey via `existing` + `listKeys()` so callers do not have to plumb secrets.')
+param logAnalyticsWorkspaceName string = ''
 
-@description('Shared key for the Log Analytics workspace. Marked secure even though it is a workspace shared key.')
+@description('Customer ID (workspaceId) of the Log Analytics workspace. Only required when `logAnalyticsWorkspaceName` is empty.')
+param logAnalyticsCustomerId string = ''
+
+@description('Shared key for the Log Analytics workspace. Only required when `logAnalyticsWorkspaceName` is empty. Marked secure even though it is a workspace shared key.')
 @secure()
-param logAnalyticsSharedKey string
+param logAnalyticsSharedKey string = ''
 
 @description('Set true to make the VNet-injected environment internal-only (ingress private). The current deployment is external.')
 param vnetEnvInternal bool = false
 
+@description('When true (default), also deploy the legacy consumption-only CAE. Set false for greenfield (azd up) deployments that do not need the iqpoc-era legacy environment.')
+param deployLegacyEnv bool = true
+
 @description('Tag map applied to both environments.')
 param tags object = {}
 
-resource legacyEnv 'Microsoft.App/managedEnvironments@2024-10-02-preview' = {
+resource workspace 'Microsoft.OperationalInsights/workspaces@2022-10-01' existing = if (!empty(logAnalyticsWorkspaceName)) {
+  name: logAnalyticsWorkspaceName
+}
+
+var effectiveCustomerId = !empty(logAnalyticsWorkspaceName) ? (workspace.?properties.?customerId ?? '') : logAnalyticsCustomerId
+var effectiveSharedKey = !empty(logAnalyticsWorkspaceName)
+  ? listKeys(resourceId('Microsoft.OperationalInsights/workspaces', logAnalyticsWorkspaceName), '2022-10-01').primarySharedKey
+  : logAnalyticsSharedKey
+
+resource legacyEnv 'Microsoft.App/managedEnvironments@2024-10-02-preview' = if (deployLegacyEnv) {
   name: legacyEnvName
   location: location
   tags: tags
@@ -52,8 +67,8 @@ resource legacyEnv 'Microsoft.App/managedEnvironments@2024-10-02-preview' = {
     appLogsConfiguration: {
       destination: 'log-analytics'
       logAnalyticsConfiguration: {
-        customerId: logAnalyticsCustomerId
-        sharedKey: logAnalyticsSharedKey
+        customerId: effectiveCustomerId
+        sharedKey: effectiveSharedKey
       }
     }
   }
@@ -77,15 +92,15 @@ resource vnetEnv 'Microsoft.App/managedEnvironments@2024-10-02-preview' = {
     appLogsConfiguration: {
       destination: 'log-analytics'
       logAnalyticsConfiguration: {
-        customerId: logAnalyticsCustomerId
-        sharedKey: logAnalyticsSharedKey
+        customerId: effectiveCustomerId
+        sharedKey: effectiveSharedKey
       }
     }
   }
 }
 
-output legacyEnvId string = legacyEnv.id
-output legacyEnvName string = legacyEnv.name
+output legacyEnvId string = deployLegacyEnv ? legacyEnv.id : ''
+output legacyEnvName string = deployLegacyEnv ? legacyEnv.name : ''
 output vnetEnvId string = vnetEnv.id
 output vnetEnvName string = vnetEnv.name
 output vnetEnvDefaultDomain string = vnetEnv.properties.defaultDomain

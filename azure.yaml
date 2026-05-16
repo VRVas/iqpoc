@@ -1,0 +1,60 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/Azure/azure-dev/main/schemas/v1.0/azure.yaml.json
+
+# Azure Developer CLI (azd) project definition for the Foundry IQ demo.
+# Greenfield workflow:
+#   azd init             (one-time, creates ./.azure/<env>)
+#   azd auth login
+#   azd up               (provision infra + build/deploy all services)
+# Subsequent updates:
+#   azd deploy           (rebuild + redeploy a service)
+#   azd provision        (re-apply infra only)
+#
+# Ref: https://learn.microsoft.com/azure/developer/azure-developer-cli/azd-schema
+
+name: foundry-iq-demo
+metadata:
+  template: foundry-iq-demo@1.0.0
+
+# Order the up workflow so all infra is provisioned before any image is built
+# (the container apps need ACR_LOGIN_SERVER from outputs, exported as env vars).
+workflows:
+  up:
+    steps:
+      - azd: provision
+      - azd: deploy --all
+
+infra:
+  provider: bicep
+  path: infra
+  module: main
+
+services:
+  # Next.js front-end on Azure Static Web Apps.
+  # Uses staticwebapp.config.json + the SWA CLI build (Next standalone) under the hood.
+  web:
+    project: .
+    language: ts
+    host: staticwebapp
+    dist: .next
+
+  # FastAPI evaluation service on Azure Container Apps.
+  # remoteBuild: true makes azd push the source to ACR Tasks for the image build,
+  # so contributors don't need a local Docker daemon.
+  eval-service:
+    project: ./eval-service
+    language: python
+    host: containerapp
+    docker:
+      path: ./Dockerfile
+      context: .
+      remoteBuild: true
+
+  # Node.js storage proxy on Azure Container Apps (VNet-injected).
+  storage-proxy:
+    project: ./storage-proxy
+    language: js
+    host: containerapp
+    docker:
+      path: ./Dockerfile
+      context: .
+      remoteBuild: true

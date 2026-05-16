@@ -35,11 +35,17 @@ param userAssignedIdentityClientId string
 @description('Resource ID of an existing Container Apps managed environment with VNet injection.')
 param containerAppEnvResourceId string
 
-@description('Fully qualified image reference for the eval-service container, e.g. cronlgvc76rbuge.azurecr.io/eval-service/eval-service:v26.')
-param containerImage string
+@description('Fully qualified image reference for the eval-service container, e.g. <acr>.azurecr.io/eval-service/eval-service:v26. When `containerAppExists` is true and a live image is present, the existing image wins (azd-style image preservation).')
+param containerImage string = 'mcr.microsoft.com/azuredocs/containerapps-helloworld:latest'
+
+@description('When true, the module reads the live container app image and preserves it across redeploys. Set this to the value of azd\'s SERVICE_EVAL_SERVICE_RESOURCE_EXISTS environment variable.')
+param containerAppExists bool = false
 
 @description('Resource ID of the Azure Container Registry that hosts the image. Used for managed-identity ACR pull RBAC.')
 param acrResourceId string = ''
+
+@description('Optional explicit ACR login server (e.g. <acr>.azurecr.io). When empty, derived from acrResourceId.')
+param acrLoginServer string = ''
 
 @description('When true, this module creates an AcrPull role assignment at the current RG scope. Leave false when the ACR lives in another RG/subscription and AcrPull is granted out-of-band on the ACR scope. The iqpoc deployment grants AcrPull directly on the ACR in rg-hiacoo-mcp-private.')
 param manageAcrPullRoleAssignment bool = false
@@ -227,7 +233,23 @@ resource acrPullAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' 
 // ---------------------------------------------------------------------------
 // Container App — FastAPI eval-service with UAMI for Cosmos + Foundry
 // Public ingress, internal-only Cosmos via private endpoint.
+//
+// Image preservation: when this template is re-applied via `azd provision`
+// after `azd deploy` has already pushed a real image, we reference the live
+// container app and reuse its current image — otherwise every provision
+// would reset the image back to whatever string is in the `containerImage`
+// param. This is the canonical AVM container-app-upsert pattern.
 // ---------------------------------------------------------------------------
+resource existingEvalServiceApp 'Microsoft.App/containerApps@2024-10-02-preview' existing = if (containerAppExists) {
+  name: containerAppName
+}
+
+var evalLiveImage = containerAppExists ? (existingEvalServiceApp.?properties.?template.?containers[0].?image ?? '') : ''
+var evalEffectiveImage = !empty(evalLiveImage) ? evalLiveImage : containerImage
+var evalEffectiveLoginServer = !empty(acrLoginServer)
+  ? acrLoginServer
+  : (!empty(acrResourceId) ? '${split(last(split(acrResourceId, '/')), '.')[0]}.azurecr.io' : '')
+
 resource evalServiceApp 'Microsoft.App/containerApps@2024-10-02-preview' = {
   name: containerAppName
   location: location
@@ -247,9 +269,9 @@ resource evalServiceApp 'Microsoft.App/containerApps@2024-10-02-preview' = {
         transport: 'auto'
         allowInsecure: false
       }
-      registries: !empty(acrResourceId) ? [
+      registries: !empty(evalEffectiveLoginServer) ? [
         {
-          server: '${split(last(split(acrResourceId, '/')), '.')[0]}.azurecr.io'
+          server: evalEffectiveLoginServer
           identity: userAssignedIdentityResourceId
         }
       ] : []
@@ -258,7 +280,7 @@ resource evalServiceApp 'Microsoft.App/containerApps@2024-10-02-preview' = {
       containers: [
         {
           name: 'eval-service'
-          image: containerImage
+          image: evalEffectiveImage
           resources: {
             cpu: json('0.5')
             memory: '1Gi'

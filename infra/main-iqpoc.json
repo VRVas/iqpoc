@@ -1,290 +1,279 @@
 {
-  "$schema": "https://schema.management.azure.com/schemas/2018-05-01/subscriptionDeploymentTemplate.json#",
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
   "contentVersion": "1.0.0.0",
   "metadata": {
     "_generator": {
       "name": "bicep",
       "version": "0.33.93.31351",
-      "templateHash": "2230779299648693246"
+      "templateHash": "432407545366572479"
     }
   },
   "parameters": {
-    "environmentName": {
-      "type": "string",
-      "minLength": 1,
-      "maxLength": 64,
-      "metadata": {
-        "description": "Name of the azd environment. Used for the resource group name and as a uniqueness seed."
-      }
-    },
     "location": {
       "type": "string",
-      "minLength": 1,
+      "defaultValue": "[resourceGroup().location]",
       "metadata": {
-        "description": "Primary location for all resources."
+        "description": "Azure region used for every resource in this RG (DNS zones are global)."
       }
     },
-    "principalId": {
-      "type": "string",
-      "defaultValue": "",
+    "tags": {
+      "type": "object",
+      "defaultValue": {
+        "environment": "demo",
+        "solution": "foundry-iq-demo",
+        "managedBy": "Bicep",
+        "SecurityControl": "Ignore",
+        "SecurityGroup": "Ignore"
+      },
       "metadata": {
-        "description": "Object ID of the user or service principal that should receive demo RBAC (Storage Blob Data Contributor, Cosmos Data Contributor, etc.). azd populates this automatically from AZURE_PRINCIPAL_ID."
+        "description": "Tag map applied to every resource."
       }
-    },
-    "resourceGroupName": {
-      "type": "string",
-      "defaultValue": ""
-    },
-    "logAnalyticsName": {
-      "type": "string",
-      "defaultValue": ""
-    },
-    "appInsightsName": {
-      "type": "string",
-      "defaultValue": ""
     },
     "vnetName": {
       "type": "string",
-      "defaultValue": ""
-    },
-    "acrName": {
-      "type": "string",
-      "defaultValue": ""
-    },
-    "containerAppsEnvironmentName": {
-      "type": "string",
-      "defaultValue": ""
+      "defaultValue": "vnet-iqpoc",
+      "metadata": {
+        "description": "Virtual network name."
+      }
     },
     "searchServiceName": {
       "type": "string",
-      "defaultValue": ""
+      "defaultValue": "aikb-search-q36gpyt3maa7w",
+      "metadata": {
+        "description": "AI Search service name."
+      }
     },
     "storageAccountName": {
       "type": "string",
-      "defaultValue": ""
+      "defaultValue": "aikbstorageq36gpyt3maa7w",
+      "metadata": {
+        "description": "Storage account name."
+      }
     },
     "foundryAccountName": {
       "type": "string",
-      "defaultValue": ""
+      "defaultValue": "aikb-foundry-q36gpyt3maa7w",
+      "metadata": {
+        "description": "AI Services (Foundry) account name."
+      }
     },
     "foundryProjectName": {
       "type": "string",
-      "defaultValue": "[format('proj-{0}', take(replace(parameters('environmentName'), '_', '-'), 40))]"
+      "defaultValue": "proj-iqpoc",
+      "metadata": {
+        "description": "Foundry project name (child of the AIServices account)."
+      }
     },
     "staticWebAppName": {
       "type": "string",
-      "defaultValue": ""
-    },
-    "evalServiceIdentityName": {
-      "type": "string",
-      "defaultValue": ""
-    },
-    "storageProxyIdentityName": {
-      "type": "string",
-      "defaultValue": ""
-    },
-    "storageProxyAppName": {
-      "type": "string",
-      "defaultValue": "ca-storage-proxy"
-    },
-    "evalServiceAppName": {
-      "type": "string",
-      "defaultValue": "ca-eval-svc"
-    },
-    "cosmosAccountName": {
-      "type": "string",
-      "defaultValue": ""
-    },
-    "storageProxyAppExists": {
-      "type": "bool",
-      "defaultValue": false,
+      "defaultValue": "aikb-web-q36gpyt3maa7w",
       "metadata": {
-        "description": "Set to true after the first `azd deploy storage-proxy`. azd manages this automatically via SERVICE_STORAGE_PROXY_RESOURCE_EXISTS."
-      }
-    },
-    "evalServiceAppExists": {
-      "type": "bool",
-      "defaultValue": false,
-      "metadata": {
-        "description": "Set to true after the first `azd deploy eval-service`. azd manages this automatically via SERVICE_EVAL_SERVICE_RESOURCE_EXISTS."
-      }
-    },
-    "staticWebAppRepositoryUrl": {
-      "type": "string",
-      "defaultValue": "",
-      "metadata": {
-        "description": "GitHub repository URL. Leave empty to skip GitHub provider wiring (azd deploy mode)."
-      }
-    },
-    "staticWebAppRepositoryToken": {
-      "type": "securestring",
-      "defaultValue": "",
-      "metadata": {
-        "description": "GitHub repository token. Leave empty to skip GitHub provider wiring."
+        "description": "Static Web App name."
       }
     },
     "staticWebAppLocation": {
       "type": "string",
       "defaultValue": "eastus2",
-      "allowedValues": [
-        "westus2",
-        "centralus",
-        "eastus2",
-        "westeurope",
-        "eastasia"
-      ],
       "metadata": {
-        "description": "Static Web App location. SWA is GA in: westus2, centralus, eastus2, westeurope, eastasia."
+        "description": "Static Web App region — must be one of the SWA-supported regions."
+      }
+    },
+    "logAnalyticsName": {
+      "type": "string",
+      "defaultValue": "log-eval-iqpoc",
+      "metadata": {
+        "description": "Log Analytics workspace name."
+      }
+    },
+    "appInsightsName": {
+      "type": "string",
+      "defaultValue": "appi-eval-iqpoc",
+      "metadata": {
+        "description": "Application Insights resource name."
+      }
+    },
+    "cosmosAccountName": {
+      "type": "string",
+      "defaultValue": "cosmos-eval-iqpoc",
+      "metadata": {
+        "description": "Cosmos DB account name."
+      }
+    },
+    "cosmosPrivateEndpointName": {
+      "type": "string",
+      "defaultValue": "pe-cosmos-iqpoc",
+      "metadata": {
+        "description": "Existing private endpoint name for the Cosmos account. Live resource is named `pe-cosmos-iqpoc` (predates eval rename)."
+      }
+    },
+    "vnetCaeName": {
+      "type": "string",
+      "defaultValue": "cae-storage-proxy",
+      "metadata": {
+        "description": "VNet-injected Container Apps environment name."
+      }
+    },
+    "legacyCaeName": {
+      "type": "string",
+      "defaultValue": "cae-eval-iqpoc",
+      "metadata": {
+        "description": "Legacy non-VNet Container Apps environment name (kept until ca-eval-service is decommissioned)."
+      }
+    },
+    "evalServiceAppName": {
+      "type": "string",
+      "defaultValue": "ca-eval-svc-v2",
+      "metadata": {
+        "description": "eval-service container app name."
+      }
+    },
+    "storageProxyAppName": {
+      "type": "string",
+      "defaultValue": "ca-storage-proxy",
+      "metadata": {
+        "description": "storage-proxy container app name."
+      }
+    },
+    "evalServiceIdentityName": {
+      "type": "string",
+      "defaultValue": "id-eval-service",
+      "metadata": {
+        "description": "UAMI used by eval-service."
+      }
+    },
+    "storageProxyIdentityName": {
+      "type": "string",
+      "defaultValue": "id-storage-proxy",
+      "metadata": {
+        "description": "UAMI used by storage-proxy."
+      }
+    },
+    "acrResourceId": {
+      "type": "string",
+      "defaultValue": "/subscriptions/e7f1696a-37dd-4876-accb-2facb8713917/resourceGroups/rg-hiacoo-mcp-private/providers/Microsoft.ContainerRegistry/registries/cronlgvc76rbuge",
+      "metadata": {
+        "description": "Resource ID of the shared ACR (lives in another resource group/subscription)."
+      }
+    },
+    "evalServiceImage": {
+      "type": "string",
+      "defaultValue": "cronlgvc76rbuge.azurecr.io/eval-service/eval-service:v26",
+      "metadata": {
+        "description": "eval-service container image tag."
+      }
+    },
+    "storageProxyImage": {
+      "type": "string",
+      "defaultValue": "cronlgvc76rbuge.azurecr.io/storage-proxy:v2",
+      "metadata": {
+        "description": "storage-proxy container image tag."
+      }
+    },
+    "swaRepositoryUrl": {
+      "type": "string",
+      "defaultValue": "https://github.com/VRVas/iqpoc",
+      "metadata": {
+        "description": "GitHub repository URL for the SWA."
+      }
+    },
+    "swaBranch": {
+      "type": "string",
+      "defaultValue": "main",
+      "metadata": {
+        "description": "GitHub branch tracked by the SWA."
+      }
+    },
+    "swaRepositoryToken": {
+      "type": "securestring",
+      "defaultValue": "",
+      "metadata": {
+        "description": "GitHub PAT for the SWA. Leave empty to skip linking; supply via deployment to (re)link the repo."
       }
     },
     "foundryModelDeployments": {
       "type": "array",
       "defaultValue": [
         {
+          "name": "text-embedding-3-small",
+          "model": "text-embedding-3-small",
+          "version": "1",
+          "sku": "Standard",
+          "capacity": 210
+        },
+        {
           "name": "gpt-4o-mini",
-          "model": "gpt-4o-mini",
-          "version": "2024-07-18",
-          "sku": "GlobalStandard",
-          "capacity": 30
+          "model": "gpt-4.1-mini",
+          "version": "2025-04-14",
+          "sku": "Standard",
+          "capacity": 420
+        },
+        {
+          "name": "gpt-5",
+          "model": "gpt-5",
+          "version": "2025-08-07",
+          "sku": "DataZoneStandard",
+          "capacity": 300
+        },
+        {
+          "name": "gpt-5.2",
+          "model": "gpt-5.2",
+          "version": "2025-12-11",
+          "sku": "DataZoneStandard",
+          "capacity": 300
+        },
+        {
+          "name": "text-embedding-3-large",
+          "model": "text-embedding-3-large",
+          "version": "1",
+          "sku": "Standard",
+          "capacity": 230
+        },
+        {
+          "name": "gpt-4.1",
+          "model": "gpt-4.1",
+          "version": "2025-04-14",
+          "sku": "Standard",
+          "capacity": 500
         },
         {
           "name": "gpt-4.1-mini",
           "model": "gpt-4.1-mini",
           "version": "2025-04-14",
+          "sku": "Standard",
+          "capacity": 500
+        },
+        {
+          "name": "gpt-5.4-mini",
+          "model": "gpt-5.4-mini",
+          "version": "2026-03-17",
           "sku": "GlobalStandard",
-          "capacity": 30
+          "capacity": 1000
         }
       ],
       "metadata": {
-        "description": "Foundry/AIServices model deployments. Defaults to the two chat models used by the eval-service and front-end. Add a text-embedding-3-small entry if your subscription has TPM quota and you need embeddings."
+        "description": "Foundry / AI Services model deployments (kept in sync with the live account)."
+      }
+    },
+    "foundryModelDeployment": {
+      "type": "string",
+      "defaultValue": "gpt-4.1-mini",
+      "metadata": {
+        "description": "Default model deployment used by the eval-service."
+      }
+    },
+    "evalPollerIntervalSeconds": {
+      "type": "int",
+      "defaultValue": 30,
+      "metadata": {
+        "description": "Background poller interval (seconds)."
       }
     }
   },
-  "variables": {
-    "$fxv#0": {
-      "analysisServicesServers": "as",
-      "apiManagementService": "apim-",
-      "appConfigurationStores": "appcs-",
-      "appManagedEnvironments": "cae-",
-      "appContainerApps": "ca-",
-      "authorizationPolicyDefinitions": "policy-",
-      "cacheRedis": "redis-",
-      "cdnProfiles": "cdnp-",
-      "cdnProfilesEndpoints": "cdne-",
-      "cognitiveServicesAccounts": "cog-",
-      "cognitiveServicesFormRecognizer": "cog-fr-",
-      "cognitiveServicesTextAnalytics": "cog-ta-",
-      "cognitiveServicesSpeech": "cog-sp-",
-      "containerInstanceContainerGroups": "ci",
-      "containerRegistryRegistries": "cr",
-      "containerServiceManagedClusters": "aks-",
-      "databricksWorkspaces": "dbw-",
-      "dataFactoryFactories": "adf-",
-      "dataLakeAnalyticsAccounts": "dla",
-      "dataLakeStoreAccounts": "dls",
-      "dataMigrationServices": "dms-",
-      "dBforMySQLServers": "mysql-",
-      "dBforPostgreSQLServers": "psql-",
-      "devicesIotHubs": "iot-",
-      "devicesProvisioningServices": "provs-",
-      "documentDBDatabaseAccounts": "cosmos-",
-      "eventGridDomains": "evgd-",
-      "eventGridDomainsTopics": "evgt-",
-      "eventGridEventSubscriptions": "evgs-",
-      "eventHubNamespaces": "evhns-",
-      "eventHubNamespacesEventHubs": "evh-",
-      "insightsActionGroups": "ag-",
-      "insightsComponents": "appi-",
-      "keyVaultVaults": "kv-",
-      "kubernetesConnectedClusters": "arck",
-      "managedIdentityUserAssignedIdentities": "id-",
-      "managementManagementGroups": "mg-",
-      "networkApplicationGateways": "agw-",
-      "networkApplicationSecurityGroups": "asg-",
-      "networkAzureFirewalls": "afw-",
-      "networkBastionHosts": "bas-",
-      "networkConnections": "con-",
-      "networkDnsZones": "dnsz-",
-      "networkExpressRouteCircuits": "erc-",
-      "networkFirewallPolicies": "afwp-",
-      "networkFrontDoors": "fd-",
-      "networkFrontdoorWebApplicationFirewallPolicies": "fdfp-",
-      "networkLoadBalancersExternal": "lbe-",
-      "networkLoadBalancersInternal": "lbi-",
-      "networkLocalNetworkGateways": "lgw-",
-      "networkNatGateways": "ng-",
-      "networkNetworkInterfaces": "nic-",
-      "networkNetworkSecurityGroups": "nsg-",
-      "networkNetworkWatchers": "nw-",
-      "networkPrivateDnsZones": "pdnsz-",
-      "networkPrivateEndpoints": "pe-",
-      "networkPrivateLinkServices": "pl-",
-      "networkPublicIPAddresses": "pip-",
-      "networkPublicIPPrefixes": "ippre-",
-      "networkRouteFilters": "rf-",
-      "networkRouteTables": "rt-",
-      "networkTrafficManagerProfiles": "traf-",
-      "networkVirtualNetworkGateways": "vgw-",
-      "networkVirtualNetworks": "vnet-",
-      "networkVirtualNetworksSubnets": "snet-",
-      "networkVirtualNetworksVirtualNetworkPeerings": "peer-",
-      "networkVirtualWans": "vwan-",
-      "networkVpnGateways": "vpng-",
-      "operationalInsightsWorkspaces": "log-",
-      "portalDashboards": "dash-",
-      "purviewAccounts": "pview-",
-      "recoveryServicesVaults": "rsv-",
-      "resourcesResourceGroups": "rg-",
-      "searchSearchServices": "srch-",
-      "serviceBusNamespaces": "sb-",
-      "serviceBusNamespacesQueues": "sbq-",
-      "serviceBusNamespacesTopics": "sbt-",
-      "serviceEndPointPolicies": "se-",
-      "serviceFabricClusters": "sf-",
-      "signalRServiceSignalR": "sigr",
-      "sqlServers": "sql-",
-      "sqlServersDatabases": "sqldb-",
-      "storageStorageAccounts": "st",
-      "storageStorageAccountsVm": "stvm",
-      "synapseWorkspaces": "syn",
-      "webServerFarms": "plan-",
-      "webSitesAppService": "app-",
-      "webSitesAppServiceEnvironment": "ase-",
-      "webSitesFunctions": "func-",
-      "webStaticSites": "stapp-"
-    },
-    "abbrs": "[variables('$fxv#0')]",
-    "resourceToken": "[toLower(uniqueString(subscription().id, parameters('environmentName'), parameters('location')))]",
-    "tags": {
-      "azd-env-name": "[parameters('environmentName')]"
-    },
-    "effectiveResourceGroupName": "[if(not(empty(parameters('resourceGroupName'))), parameters('resourceGroupName'), format('{0}{1}', variables('abbrs').resourcesResourceGroups, parameters('environmentName')))]",
-    "effectiveLogAnalyticsName": "[if(not(empty(parameters('logAnalyticsName'))), parameters('logAnalyticsName'), format('{0}{1}', variables('abbrs').operationalInsightsWorkspaces, variables('resourceToken')))]",
-    "effectiveAppInsightsName": "[if(not(empty(parameters('appInsightsName'))), parameters('appInsightsName'), format('{0}{1}', variables('abbrs').insightsComponents, variables('resourceToken')))]",
-    "effectiveVnetName": "[if(not(empty(parameters('vnetName'))), parameters('vnetName'), format('{0}{1}', variables('abbrs').networkVirtualNetworks, parameters('environmentName')))]",
-    "effectiveAcrName": "[if(not(empty(parameters('acrName'))), parameters('acrName'), format('{0}{1}', variables('abbrs').containerRegistryRegistries, variables('resourceToken')))]",
-    "effectiveCaeName": "[if(not(empty(parameters('containerAppsEnvironmentName'))), parameters('containerAppsEnvironmentName'), format('{0}{1}', variables('abbrs').appManagedEnvironments, parameters('environmentName')))]",
-    "effectiveSearchName": "[if(not(empty(parameters('searchServiceName'))), parameters('searchServiceName'), format('{0}{1}', variables('abbrs').searchSearchServices, variables('resourceToken')))]",
-    "effectiveStorageName": "[if(not(empty(parameters('storageAccountName'))), parameters('storageAccountName'), format('{0}{1}', variables('abbrs').storageStorageAccounts, variables('resourceToken')))]",
-    "effectiveFoundryAccountName": "[if(not(empty(parameters('foundryAccountName'))), parameters('foundryAccountName'), format('{0}{1}', variables('abbrs').cognitiveServicesAccounts, variables('resourceToken')))]",
-    "effectiveStaticWebAppName": "[if(not(empty(parameters('staticWebAppName'))), parameters('staticWebAppName'), format('{0}{1}', variables('abbrs').webStaticSites, variables('resourceToken')))]",
-    "effectiveEvalIdentityName": "[if(not(empty(parameters('evalServiceIdentityName'))), parameters('evalServiceIdentityName'), format('{0}eval-{1}', variables('abbrs').managedIdentityUserAssignedIdentities, variables('resourceToken')))]",
-    "effectiveStorageProxyIdentityName": "[if(not(empty(parameters('storageProxyIdentityName'))), parameters('storageProxyIdentityName'), format('{0}proxy-{1}', variables('abbrs').managedIdentityUserAssignedIdentities, variables('resourceToken')))]",
-    "effectiveCosmosName": "[if(not(empty(parameters('cosmosAccountName'))), parameters('cosmosAccountName'), format('{0}{1}', variables('abbrs').documentDBDatabaseAccounts, variables('resourceToken')))]"
-  },
   "resources": [
-    {
-      "type": "Microsoft.Resources/resourceGroups",
-      "apiVersion": "2024-03-01",
-      "name": "[variables('effectiveResourceGroupName')]",
-      "location": "[parameters('location')]",
-      "tags": "[variables('tags')]"
-    },
     {
       "type": "Microsoft.Resources/deployments",
       "apiVersion": "2022-09-01",
       "name": "deploy-network",
-      "resourceGroup": "[variables('effectiveResourceGroupName')]",
       "properties": {
         "expressionEvaluationOptions": {
           "scope": "inner"
@@ -295,10 +284,10 @@
             "value": "[parameters('location')]"
           },
           "vnetName": {
-            "value": "[variables('effectiveVnetName')]"
+            "value": "[parameters('vnetName')]"
           },
           "tags": {
-            "value": "[variables('tags')]"
+            "value": "[parameters('tags')]"
           }
         },
         "template": {
@@ -521,127 +510,12 @@
             }
           }
         }
-      },
-      "dependsOn": [
-        "[subscriptionResourceId('Microsoft.Resources/resourceGroups', variables('effectiveResourceGroupName'))]"
-      ]
-    },
-    {
-      "type": "Microsoft.Resources/deployments",
-      "apiVersion": "2022-09-01",
-      "name": "deploy-identity",
-      "resourceGroup": "[variables('effectiveResourceGroupName')]",
-      "properties": {
-        "expressionEvaluationOptions": {
-          "scope": "inner"
-        },
-        "mode": "Incremental",
-        "parameters": {
-          "location": {
-            "value": "[parameters('location')]"
-          },
-          "evalServiceIdentityName": {
-            "value": "[variables('effectiveEvalIdentityName')]"
-          },
-          "storageProxyIdentityName": {
-            "value": "[variables('effectiveStorageProxyIdentityName')]"
-          },
-          "tags": {
-            "value": "[variables('tags')]"
-          }
-        },
-        "template": {
-          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
-          "contentVersion": "1.0.0.0",
-          "metadata": {
-            "_generator": {
-              "name": "bicep",
-              "version": "0.33.93.31351",
-              "templateHash": "7259360037490382384"
-            }
-          },
-          "parameters": {
-            "location": {
-              "type": "string",
-              "metadata": {
-                "description": "Azure region."
-              }
-            },
-            "evalServiceIdentityName": {
-              "type": "string",
-              "defaultValue": "id-eval-service",
-              "metadata": {
-                "description": "Name of the UAMI used by the eval-service container app for Cosmos DB + Foundry access."
-              }
-            },
-            "storageProxyIdentityName": {
-              "type": "string",
-              "defaultValue": "id-storage-proxy",
-              "metadata": {
-                "description": "Name of the UAMI used by the storage-proxy container app for Storage Blob data plane access."
-              }
-            },
-            "tags": {
-              "type": "object",
-              "defaultValue": {},
-              "metadata": {
-                "description": "Tag map applied to both identities."
-              }
-            }
-          },
-          "resources": [
-            {
-              "type": "Microsoft.ManagedIdentity/userAssignedIdentities",
-              "apiVersion": "2023-01-31",
-              "name": "[parameters('evalServiceIdentityName')]",
-              "location": "[parameters('location')]",
-              "tags": "[parameters('tags')]"
-            },
-            {
-              "type": "Microsoft.ManagedIdentity/userAssignedIdentities",
-              "apiVersion": "2023-01-31",
-              "name": "[parameters('storageProxyIdentityName')]",
-              "location": "[parameters('location')]",
-              "tags": "[parameters('tags')]"
-            }
-          ],
-          "outputs": {
-            "evalServiceIdentityId": {
-              "type": "string",
-              "value": "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', parameters('evalServiceIdentityName'))]"
-            },
-            "evalServiceIdentityClientId": {
-              "type": "string",
-              "value": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', parameters('evalServiceIdentityName')), '2023-01-31').clientId]"
-            },
-            "evalServiceIdentityPrincipalId": {
-              "type": "string",
-              "value": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', parameters('evalServiceIdentityName')), '2023-01-31').principalId]"
-            },
-            "storageProxyIdentityId": {
-              "type": "string",
-              "value": "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', parameters('storageProxyIdentityName'))]"
-            },
-            "storageProxyIdentityClientId": {
-              "type": "string",
-              "value": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', parameters('storageProxyIdentityName')), '2023-01-31').clientId]"
-            },
-            "storageProxyIdentityPrincipalId": {
-              "type": "string",
-              "value": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', parameters('storageProxyIdentityName')), '2023-01-31').principalId]"
-            }
-          }
-        }
-      },
-      "dependsOn": [
-        "[subscriptionResourceId('Microsoft.Resources/resourceGroups', variables('effectiveResourceGroupName'))]"
-      ]
+      }
     },
     {
       "type": "Microsoft.Resources/deployments",
       "apiVersion": "2022-09-01",
       "name": "deploy-observability",
-      "resourceGroup": "[variables('effectiveResourceGroupName')]",
       "properties": {
         "expressionEvaluationOptions": {
           "scope": "inner"
@@ -652,19 +526,16 @@
             "value": "[parameters('location')]"
           },
           "logAnalyticsName": {
-            "value": "[variables('effectiveLogAnalyticsName')]"
+            "value": "[parameters('logAnalyticsName')]"
           },
           "appInsightsName": {
-            "value": "[variables('effectiveAppInsightsName')]"
+            "value": "[parameters('appInsightsName')]"
           },
           "webTestUrl": {
-            "value": "[format('https://{0}.azurestaticapps.net/', variables('effectiveStaticWebAppName'))]"
-          },
-          "webTestMatchText": {
-            "value": "html"
+            "value": "[format('https://{0}/api/warmup', reference(resourceId('Microsoft.Resources/deployments', 'deploy-staticwebapp'), '2022-09-01').outputs.defaultHostname.value)]"
           },
           "tags": {
-            "value": "[variables('tags')]"
+            "value": "[parameters('tags')]"
           }
         },
         "template": {
@@ -885,37 +756,30 @@
         }
       },
       "dependsOn": [
-        "[subscriptionResourceId('Microsoft.Resources/resourceGroups', variables('effectiveResourceGroupName'))]"
+        "[resourceId('Microsoft.Resources/deployments', 'deploy-staticwebapp')]"
       ]
     },
     {
       "type": "Microsoft.Resources/deployments",
       "apiVersion": "2022-09-01",
-      "name": "deploy-acr",
-      "resourceGroup": "[variables('effectiveResourceGroupName')]",
+      "name": "deploy-identity",
       "properties": {
         "expressionEvaluationOptions": {
           "scope": "inner"
         },
         "mode": "Incremental",
         "parameters": {
-          "acrName": {
-            "value": "[variables('effectiveAcrName')]"
-          },
           "location": {
             "value": "[parameters('location')]"
           },
-          "sku": {
-            "value": "Basic"
+          "evalServiceIdentityName": {
+            "value": "[parameters('evalServiceIdentityName')]"
+          },
+          "storageProxyIdentityName": {
+            "value": "[parameters('storageProxyIdentityName')]"
           },
           "tags": {
-            "value": "[variables('tags')]"
-          },
-          "acrPullPrincipalIds": {
-            "value": [
-              "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('effectiveResourceGroupName')), 'Microsoft.Resources/deployments', 'deploy-identity'), '2022-09-01').outputs.evalServiceIdentityPrincipalId.value]",
-              "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('effectiveResourceGroupName')), 'Microsoft.Resources/deployments', 'deploy-identity'), '2022-09-01').outputs.storageProxyIdentityPrincipalId.value]"
-            ]
+            "value": "[parameters('tags')]"
           }
         },
         "template": {
@@ -925,116 +789,87 @@
             "_generator": {
               "name": "bicep",
               "version": "0.33.93.31351",
-              "templateHash": "17739181745208917489"
+              "templateHash": "7259360037490382384"
             }
           },
           "parameters": {
-            "acrName": {
-              "type": "string",
-              "minLength": 5,
-              "maxLength": 50,
-              "metadata": {
-                "description": "ACR name. Must be globally unique, 5-50 alphanumeric chars (no dashes)."
-              }
-            },
             "location": {
               "type": "string",
               "metadata": {
                 "description": "Azure region."
               }
             },
-            "sku": {
+            "evalServiceIdentityName": {
               "type": "string",
-              "defaultValue": "Basic",
-              "allowedValues": [
-                "Basic",
-                "Standard",
-                "Premium"
-              ],
+              "defaultValue": "id-eval-service",
               "metadata": {
-                "description": "SKU."
+                "description": "Name of the UAMI used by the eval-service container app for Cosmos DB + Foundry access."
+              }
+            },
+            "storageProxyIdentityName": {
+              "type": "string",
+              "defaultValue": "id-storage-proxy",
+              "metadata": {
+                "description": "Name of the UAMI used by the storage-proxy container app for Storage Blob data plane access."
               }
             },
             "tags": {
               "type": "object",
               "defaultValue": {},
               "metadata": {
-                "description": "Tags."
-              }
-            },
-            "acrPullPrincipalIds": {
-              "type": "array",
-              "defaultValue": [],
-              "metadata": {
-                "description": "Principal IDs (typically UAMIs) to grant AcrPull on this ACR."
+                "description": "Tag map applied to both identities."
               }
             }
-          },
-          "variables": {
-            "acrPullRoleId": "7f951dda-4ed3-4680-a7ca-43fe172d538d"
           },
           "resources": [
             {
-              "type": "Microsoft.ContainerRegistry/registries",
-              "apiVersion": "2023-11-01-preview",
-              "name": "[parameters('acrName')]",
+              "type": "Microsoft.ManagedIdentity/userAssignedIdentities",
+              "apiVersion": "2023-01-31",
+              "name": "[parameters('evalServiceIdentityName')]",
               "location": "[parameters('location')]",
-              "tags": "[parameters('tags')]",
-              "sku": {
-                "name": "[parameters('sku')]"
-              },
-              "properties": {
-                "adminUserEnabled": false,
-                "publicNetworkAccess": "Enabled",
-                "zoneRedundancy": "Disabled",
-                "anonymousPullEnabled": false
-              }
+              "tags": "[parameters('tags')]"
             },
             {
-              "copy": {
-                "name": "acrPullAssignments",
-                "count": "[length(parameters('acrPullPrincipalIds'))]"
-              },
-              "type": "Microsoft.Authorization/roleAssignments",
-              "apiVersion": "2022-04-01",
-              "scope": "[format('Microsoft.ContainerRegistry/registries/{0}', parameters('acrName'))]",
-              "name": "[guid(resourceId('Microsoft.ContainerRegistry/registries', parameters('acrName')), parameters('acrPullPrincipalIds')[copyIndex()], variables('acrPullRoleId'))]",
-              "properties": {
-                "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('acrPullRoleId'))]",
-                "principalId": "[parameters('acrPullPrincipalIds')[copyIndex()]]",
-                "principalType": "ServicePrincipal"
-              },
-              "dependsOn": [
-                "[resourceId('Microsoft.ContainerRegistry/registries', parameters('acrName'))]"
-              ]
+              "type": "Microsoft.ManagedIdentity/userAssignedIdentities",
+              "apiVersion": "2023-01-31",
+              "name": "[parameters('storageProxyIdentityName')]",
+              "location": "[parameters('location')]",
+              "tags": "[parameters('tags')]"
             }
           ],
           "outputs": {
-            "acrId": {
+            "evalServiceIdentityId": {
               "type": "string",
-              "value": "[resourceId('Microsoft.ContainerRegistry/registries', parameters('acrName'))]"
+              "value": "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', parameters('evalServiceIdentityName'))]"
             },
-            "acrName": {
+            "evalServiceIdentityClientId": {
               "type": "string",
-              "value": "[parameters('acrName')]"
+              "value": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', parameters('evalServiceIdentityName')), '2023-01-31').clientId]"
             },
-            "loginServer": {
+            "evalServiceIdentityPrincipalId": {
               "type": "string",
-              "value": "[reference(resourceId('Microsoft.ContainerRegistry/registries', parameters('acrName')), '2023-11-01-preview').loginServer]"
+              "value": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', parameters('evalServiceIdentityName')), '2023-01-31').principalId]"
+            },
+            "storageProxyIdentityId": {
+              "type": "string",
+              "value": "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', parameters('storageProxyIdentityName'))]"
+            },
+            "storageProxyIdentityClientId": {
+              "type": "string",
+              "value": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', parameters('storageProxyIdentityName')), '2023-01-31').clientId]"
+            },
+            "storageProxyIdentityPrincipalId": {
+              "type": "string",
+              "value": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', parameters('storageProxyIdentityName')), '2023-01-31').principalId]"
             }
           }
         }
-      },
-      "dependsOn": [
-        "[extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('effectiveResourceGroupName')), 'Microsoft.Resources/deployments', 'deploy-identity')]",
-        "[subscriptionResourceId('Microsoft.Resources/resourceGroups', variables('effectiveResourceGroupName'))]"
-      ]
+      }
     },
     {
       "type": "Microsoft.Resources/deployments",
       "apiVersion": "2022-09-01",
       "name": "deploy-cae",
-      "resourceGroup": "[variables('effectiveResourceGroupName')]",
       "properties": {
         "expressionEvaluationOptions": {
           "scope": "inner"
@@ -1044,20 +879,23 @@
           "location": {
             "value": "[parameters('location')]"
           },
+          "legacyEnvName": {
+            "value": "[parameters('legacyCaeName')]"
+          },
           "vnetEnvName": {
-            "value": "[variables('effectiveCaeName')]"
+            "value": "[parameters('vnetCaeName')]"
           },
           "caeSubnetId": {
-            "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('effectiveResourceGroupName')), 'Microsoft.Resources/deployments', 'deploy-network'), '2022-09-01').outputs.caeSubnetId.value]"
+            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'deploy-network'), '2022-09-01').outputs.caeSubnetId.value]"
           },
-          "logAnalyticsWorkspaceName": {
-            "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('effectiveResourceGroupName')), 'Microsoft.Resources/deployments', 'deploy-observability'), '2022-09-01').outputs.workspaceName.value]"
+          "logAnalyticsCustomerId": {
+            "value": "[reference(resourceId('Microsoft.OperationalInsights/workspaces', parameters('logAnalyticsName')), '2023-09-01').customerId]"
           },
-          "deployLegacyEnv": {
-            "value": false
+          "logAnalyticsSharedKey": {
+            "value": "[listKeys(resourceId('Microsoft.OperationalInsights/workspaces', parameters('logAnalyticsName')), '2023-09-01').primarySharedKey]"
           },
           "tags": {
-            "value": "[variables('tags')]"
+            "value": "[parameters('tags')]"
           }
         },
         "template": {
@@ -1067,7 +905,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.33.93.31351",
-              "templateHash": "18361765919247375077"
+              "templateHash": "14643624078642418532"
             }
           },
           "parameters": {
@@ -1158,7 +996,7 @@
                 "appLogsConfiguration": {
                   "destination": "log-analytics",
                   "logAnalyticsConfiguration": {
-                    "customerId": "[if(not(empty(parameters('logAnalyticsWorkspaceName'))), coalesce(tryGet(tryGet(reference(resourceId('Microsoft.OperationalInsights/workspaces', parameters('logAnalyticsWorkspaceName')), '2022-10-01', 'full'), 'properties'), 'customerId'), ''), parameters('logAnalyticsCustomerId'))]",
+                    "customerId": "[if(not(empty(parameters('logAnalyticsWorkspaceName'))), reference(resourceId('Microsoft.OperationalInsights/workspaces', parameters('logAnalyticsWorkspaceName')), '2022-10-01').customerId, parameters('logAnalyticsCustomerId'))]",
                     "sharedKey": "[if(not(empty(parameters('logAnalyticsWorkspaceName'))), listKeys(resourceId('Microsoft.OperationalInsights/workspaces', parameters('logAnalyticsWorkspaceName')), '2022-10-01').primarySharedKey, parameters('logAnalyticsSharedKey'))]"
                   }
                 }
@@ -1184,7 +1022,7 @@
                 "appLogsConfiguration": {
                   "destination": "log-analytics",
                   "logAnalyticsConfiguration": {
-                    "customerId": "[if(not(empty(parameters('logAnalyticsWorkspaceName'))), coalesce(tryGet(tryGet(reference(resourceId('Microsoft.OperationalInsights/workspaces', parameters('logAnalyticsWorkspaceName')), '2022-10-01', 'full'), 'properties'), 'customerId'), ''), parameters('logAnalyticsCustomerId'))]",
+                    "customerId": "[if(not(empty(parameters('logAnalyticsWorkspaceName'))), reference(resourceId('Microsoft.OperationalInsights/workspaces', parameters('logAnalyticsWorkspaceName')), '2022-10-01').customerId, parameters('logAnalyticsCustomerId'))]",
                     "sharedKey": "[if(not(empty(parameters('logAnalyticsWorkspaceName'))), listKeys(resourceId('Microsoft.OperationalInsights/workspaces', parameters('logAnalyticsWorkspaceName')), '2022-10-01').primarySharedKey, parameters('logAnalyticsSharedKey'))]"
                   }
                 }
@@ -1216,33 +1054,31 @@
         }
       },
       "dependsOn": [
-        "[extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('effectiveResourceGroupName')), 'Microsoft.Resources/deployments', 'deploy-network')]",
-        "[extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('effectiveResourceGroupName')), 'Microsoft.Resources/deployments', 'deploy-observability')]",
-        "[subscriptionResourceId('Microsoft.Resources/resourceGroups', variables('effectiveResourceGroupName'))]"
+        "[resourceId('Microsoft.Resources/deployments', 'deploy-network')]",
+        "[resourceId('Microsoft.Resources/deployments', 'deploy-observability')]"
       ]
     },
     {
       "type": "Microsoft.Resources/deployments",
       "apiVersion": "2022-09-01",
       "name": "deploy-search",
-      "resourceGroup": "[variables('effectiveResourceGroupName')]",
       "properties": {
         "expressionEvaluationOptions": {
           "scope": "inner"
         },
         "mode": "Incremental",
         "parameters": {
+          "searchServiceName": {
+            "value": "[parameters('searchServiceName')]"
+          },
           "location": {
             "value": "[parameters('location')]"
-          },
-          "searchServiceName": {
-            "value": "[variables('effectiveSearchName')]"
           },
           "sku": {
             "value": "basic"
           },
           "tags": {
-            "value": "[variables('tags')]"
+            "value": "[parameters('tags')]"
           }
         },
         "template": {
@@ -1342,36 +1178,38 @@
             }
           }
         }
-      },
-      "dependsOn": [
-        "[subscriptionResourceId('Microsoft.Resources/resourceGroups', variables('effectiveResourceGroupName'))]"
-      ]
+      }
     },
     {
       "type": "Microsoft.Resources/deployments",
       "apiVersion": "2022-09-01",
       "name": "deploy-storage",
-      "resourceGroup": "[variables('effectiveResourceGroupName')]",
       "properties": {
         "expressionEvaluationOptions": {
           "scope": "inner"
         },
         "mode": "Incremental",
         "parameters": {
+          "storageAccountName": {
+            "value": "[parameters('storageAccountName')]"
+          },
           "location": {
             "value": "[parameters('location')]"
           },
-          "storageAccountName": {
-            "value": "[variables('effectiveStorageName')]"
+          "sku": {
+            "value": "Standard_LRS"
           },
           "tags": {
-            "value": "[variables('tags')]"
+            "value": "[parameters('tags')]"
           },
           "publicNetworkAccess": {
-            "value": "Enabled"
+            "value": "Disabled"
           },
           "networkAclDefaultAction": {
             "value": "Allow"
+          },
+          "sampleDataContainerName": {
+            "value": "sample-documents"
           }
         },
         "template": {
@@ -1673,16 +1511,12 @@
             }
           }
         }
-      },
-      "dependsOn": [
-        "[subscriptionResourceId('Microsoft.Resources/resourceGroups', variables('effectiveResourceGroupName'))]"
-      ]
+      }
     },
     {
       "type": "Microsoft.Resources/deployments",
       "apiVersion": "2022-09-01",
       "name": "deploy-storage-pe",
-      "resourceGroup": "[variables('effectiveResourceGroupName')]",
       "properties": {
         "expressionEvaluationOptions": {
           "scope": "inner"
@@ -1693,19 +1527,16 @@
             "value": "[parameters('location')]"
           },
           "storageAccountName": {
-            "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('effectiveResourceGroupName')), 'Microsoft.Resources/deployments', 'deploy-storage'), '2022-09-01').outputs.storageAccountName.value]"
+            "value": "[parameters('storageAccountName')]"
           },
           "peSubnetResourceId": {
-            "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('effectiveResourceGroupName')), 'Microsoft.Resources/deployments', 'deploy-network'), '2022-09-01').outputs.peSubnetId.value]"
+            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'deploy-network'), '2022-09-01').outputs.peSubnetId.value]"
           },
           "blobDnsZoneId": {
-            "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('effectiveResourceGroupName')), 'Microsoft.Resources/deployments', 'deploy-network'), '2022-09-01').outputs.blobDnsZoneId.value]"
-          },
-          "privateEndpointName": {
-            "value": "[format('pe-{0}', variables('effectiveStorageName'))]"
+            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'deploy-network'), '2022-09-01').outputs.blobDnsZoneId.value]"
           },
           "tags": {
-            "value": "[variables('tags')]"
+            "value": "[parameters('tags')]"
           }
         },
         "template": {
@@ -1814,16 +1645,14 @@
         }
       },
       "dependsOn": [
-        "[extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('effectiveResourceGroupName')), 'Microsoft.Resources/deployments', 'deploy-network')]",
-        "[subscriptionResourceId('Microsoft.Resources/resourceGroups', variables('effectiveResourceGroupName'))]",
-        "[extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('effectiveResourceGroupName')), 'Microsoft.Resources/deployments', 'deploy-storage')]"
+        "[resourceId('Microsoft.Resources/deployments', 'deploy-network')]",
+        "[resourceId('Microsoft.Resources/deployments', 'deploy-storage')]"
       ]
     },
     {
       "type": "Microsoft.Resources/deployments",
       "apiVersion": "2022-09-01",
       "name": "deploy-foundry",
-      "resourceGroup": "[variables('effectiveResourceGroupName')]",
       "properties": {
         "expressionEvaluationOptions": {
           "scope": "inner"
@@ -1834,22 +1663,25 @@
             "value": "[parameters('location')]"
           },
           "accountName": {
-            "value": "[variables('effectiveFoundryAccountName')]"
+            "value": "[parameters('foundryAccountName')]"
           },
           "projectName": {
             "value": "[parameters('foundryProjectName')]"
           },
           "projectDisplayName": {
-            "value": "[parameters('environmentName')]"
+            "value": "[parameters('foundryProjectName')]"
           },
           "projectDescription": {
-            "value": "[format('Foundry IQ demo project for azd env {0}.', parameters('environmentName'))]"
+            "value": "Foundry IQ demo project."
           },
           "modelDeployments": {
             "value": "[parameters('foundryModelDeployments')]"
           },
+          "publicNetworkAccess": {
+            "value": "Enabled"
+          },
           "tags": {
-            "value": "[variables('tags')]"
+            "value": "[parameters('tags')]"
           }
         },
         "template": {
@@ -2026,16 +1858,12 @@
             }
           }
         }
-      },
-      "dependsOn": [
-        "[subscriptionResourceId('Microsoft.Resources/resourceGroups', variables('effectiveResourceGroupName'))]"
-      ]
+      }
     },
     {
       "type": "Microsoft.Resources/deployments",
       "apiVersion": "2022-09-01",
-      "name": "deploy-static-web-app",
-      "resourceGroup": "[variables('effectiveResourceGroupName')]",
+      "name": "deploy-staticwebapp",
       "properties": {
         "expressionEvaluationOptions": {
           "scope": "inner"
@@ -2043,7 +1871,7 @@
         "mode": "Incremental",
         "parameters": {
           "staticWebAppName": {
-            "value": "[variables('effectiveStaticWebAppName')]"
+            "value": "[parameters('staticWebAppName')]"
           },
           "location": {
             "value": "[parameters('staticWebAppLocation')]"
@@ -2052,13 +1880,16 @@
             "value": "Standard"
           },
           "repositoryUrl": {
-            "value": "[parameters('staticWebAppRepositoryUrl')]"
+            "value": "[parameters('swaRepositoryUrl')]"
+          },
+          "branch": {
+            "value": "[parameters('swaBranch')]"
           },
           "repositoryToken": {
-            "value": "[parameters('staticWebAppRepositoryToken')]"
+            "value": "[parameters('swaRepositoryToken')]"
           },
           "tags": {
-            "value": "[union(variables('tags'), createObject('azd-service-name', 'web'))]"
+            "value": "[parameters('tags')]"
           }
         },
         "template": {
@@ -2180,16 +2011,12 @@
             }
           }
         }
-      },
-      "dependsOn": [
-        "[subscriptionResourceId('Microsoft.Resources/resourceGroups', variables('effectiveResourceGroupName'))]"
-      ]
+      }
     },
     {
       "type": "Microsoft.Resources/deployments",
       "apiVersion": "2022-09-01",
       "name": "deploy-storage-proxy",
-      "resourceGroup": "[variables('effectiveResourceGroupName')]",
       "properties": {
         "expressionEvaluationOptions": {
           "scope": "inner"
@@ -2203,34 +2030,28 @@
             "value": "[parameters('storageProxyAppName')]"
           },
           "containerAppEnvResourceId": {
-            "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('effectiveResourceGroupName')), 'Microsoft.Resources/deployments', 'deploy-cae'), '2022-09-01').outputs.vnetEnvId.value]"
+            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'deploy-cae'), '2022-09-01').outputs.vnetEnvId.value]"
           },
-          "containerAppExists": {
-            "value": "[parameters('storageProxyAppExists')]"
+          "containerImage": {
+            "value": "[parameters('storageProxyImage')]"
           },
           "userAssignedIdentityResourceId": {
-            "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('effectiveResourceGroupName')), 'Microsoft.Resources/deployments', 'deploy-identity'), '2022-09-01').outputs.storageProxyIdentityId.value]"
+            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'deploy-identity'), '2022-09-01').outputs.storageProxyIdentityId.value]"
           },
           "userAssignedIdentityClientId": {
-            "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('effectiveResourceGroupName')), 'Microsoft.Resources/deployments', 'deploy-identity'), '2022-09-01').outputs.storageProxyIdentityClientId.value]"
+            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'deploy-identity'), '2022-09-01').outputs.storageProxyIdentityClientId.value]"
           },
           "userAssignedIdentityPrincipalId": {
-            "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('effectiveResourceGroupName')), 'Microsoft.Resources/deployments', 'deploy-identity'), '2022-09-01').outputs.storageProxyIdentityPrincipalId.value]"
+            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'deploy-identity'), '2022-09-01').outputs.storageProxyIdentityPrincipalId.value]"
           },
           "acrResourceId": {
-            "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('effectiveResourceGroupName')), 'Microsoft.Resources/deployments', 'deploy-acr'), '2022-09-01').outputs.acrId.value]"
-          },
-          "acrLoginServer": {
-            "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('effectiveResourceGroupName')), 'Microsoft.Resources/deployments', 'deploy-acr'), '2022-09-01').outputs.loginServer.value]"
+            "value": "[parameters('acrResourceId')]"
           },
           "storageAccountName": {
-            "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('effectiveResourceGroupName')), 'Microsoft.Resources/deployments', 'deploy-storage'), '2022-09-01').outputs.storageAccountName.value]"
-          },
-          "manageAcrPullRoleAssignment": {
-            "value": false
+            "value": "[parameters('storageAccountName')]"
           },
           "tags": {
-            "value": "[union(variables('tags'), createObject('azd-service-name', 'storage-proxy'))]"
+            "value": "[parameters('tags')]"
           }
         },
         "template": {
@@ -2240,7 +2061,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.33.93.31351",
-              "templateHash": "1936886188544341609"
+              "templateHash": "6106297870344946010"
             }
           },
           "parameters": {
@@ -2421,7 +2242,7 @@
                   "containers": [
                     {
                       "name": "storage-proxy",
-                      "image": "[if(not(empty(if(parameters('containerAppExists'), coalesce(tryGet(tryGet(tryGet(tryGet(reference(resourceId('Microsoft.App/containerApps', parameters('containerAppName')), '2024-10-02-preview', 'full'), 'properties'), 'template'), 'containers', 0), 'image'), ''), ''))), if(parameters('containerAppExists'), coalesce(tryGet(tryGet(tryGet(tryGet(reference(resourceId('Microsoft.App/containerApps', parameters('containerAppName')), '2024-10-02-preview', 'full'), 'properties'), 'template'), 'containers', 0), 'image'), ''), ''), parameters('containerImage'))]",
+                      "image": "[if(not(empty(if(parameters('containerAppExists'), reference(resourceId('Microsoft.App/containerApps', parameters('containerAppName')), '2024-10-02-preview').template.containers[0].image, ''))), if(parameters('containerAppExists'), reference(resourceId('Microsoft.App/containerApps', parameters('containerAppName')), '2024-10-02-preview').template.containers[0].image, ''), parameters('containerImage'))]",
                       "resources": {
                         "cpu": "[json(parameters('cpu'))]",
                         "memory": "[parameters('memory')]"
@@ -2466,18 +2287,15 @@
         }
       },
       "dependsOn": [
-        "[extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('effectiveResourceGroupName')), 'Microsoft.Resources/deployments', 'deploy-acr')]",
-        "[extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('effectiveResourceGroupName')), 'Microsoft.Resources/deployments', 'deploy-cae')]",
-        "[extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('effectiveResourceGroupName')), 'Microsoft.Resources/deployments', 'deploy-identity')]",
-        "[subscriptionResourceId('Microsoft.Resources/resourceGroups', variables('effectiveResourceGroupName'))]",
-        "[extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('effectiveResourceGroupName')), 'Microsoft.Resources/deployments', 'deploy-storage')]"
+        "[resourceId('Microsoft.Resources/deployments', 'deploy-cae')]",
+        "[resourceId('Microsoft.Resources/deployments', 'deploy-identity')]",
+        "[resourceId('Microsoft.Resources/deployments', 'deploy-storage')]"
       ]
     },
     {
       "type": "Microsoft.Resources/deployments",
       "apiVersion": "2022-09-01",
       "name": "deploy-eval-service",
-      "resourceGroup": "[variables('effectiveResourceGroupName')]",
       "properties": {
         "expressionEvaluationOptions": {
           "scope": "inner"
@@ -2488,49 +2306,49 @@
             "value": "[parameters('location')]"
           },
           "peSubnetResourceId": {
-            "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('effectiveResourceGroupName')), 'Microsoft.Resources/deployments', 'deploy-network'), '2022-09-01').outputs.peSubnetId.value]"
+            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'deploy-network'), '2022-09-01').outputs.peSubnetId.value]"
           },
           "cosmosDnsZoneResourceId": {
-            "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('effectiveResourceGroupName')), 'Microsoft.Resources/deployments', 'deploy-network'), '2022-09-01').outputs.cosmosDnsZoneId.value]"
+            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'deploy-network'), '2022-09-01').outputs.cosmosDnsZoneId.value]"
           },
           "userAssignedIdentityResourceId": {
-            "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('effectiveResourceGroupName')), 'Microsoft.Resources/deployments', 'deploy-identity'), '2022-09-01').outputs.evalServiceIdentityId.value]"
+            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'deploy-identity'), '2022-09-01').outputs.evalServiceIdentityId.value]"
           },
           "userAssignedIdentityClientId": {
-            "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('effectiveResourceGroupName')), 'Microsoft.Resources/deployments', 'deploy-identity'), '2022-09-01').outputs.evalServiceIdentityClientId.value]"
+            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'deploy-identity'), '2022-09-01').outputs.evalServiceIdentityClientId.value]"
           },
           "containerAppEnvResourceId": {
-            "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('effectiveResourceGroupName')), 'Microsoft.Resources/deployments', 'deploy-cae'), '2022-09-01').outputs.vnetEnvId.value]"
+            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'deploy-cae'), '2022-09-01').outputs.vnetEnvId.value]"
+          },
+          "containerImage": {
+            "value": "[parameters('evalServiceImage')]"
+          },
+          "acrResourceId": {
+            "value": "[parameters('acrResourceId')]"
+          },
+          "foundryProjectEndpoint": {
+            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'deploy-foundry'), '2022-09-01').outputs.projectEndpoint.value]"
+          },
+          "foundryModelDeployment": {
+            "value": "[parameters('foundryModelDeployment')]"
+          },
+          "appInsightsConnectionString": {
+            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'deploy-observability'), '2022-09-01').outputs.appInsightsConnectionString.value]"
+          },
+          "cosmosAccountName": {
+            "value": "[parameters('cosmosAccountName')]"
+          },
+          "cosmosPrivateEndpointName": {
+            "value": "[parameters('cosmosPrivateEndpointName')]"
+          },
+          "cosmosDatabaseName": {
+            "value": "eval-db"
           },
           "containerAppName": {
             "value": "[parameters('evalServiceAppName')]"
           },
-          "containerAppExists": {
-            "value": "[parameters('evalServiceAppExists')]"
-          },
-          "acrResourceId": {
-            "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('effectiveResourceGroupName')), 'Microsoft.Resources/deployments', 'deploy-acr'), '2022-09-01').outputs.acrId.value]"
-          },
-          "acrLoginServer": {
-            "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('effectiveResourceGroupName')), 'Microsoft.Resources/deployments', 'deploy-acr'), '2022-09-01').outputs.loginServer.value]"
-          },
-          "manageAcrPullRoleAssignment": {
-            "value": false
-          },
-          "foundryProjectEndpoint": {
-            "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('effectiveResourceGroupName')), 'Microsoft.Resources/deployments', 'deploy-foundry'), '2022-09-01').outputs.projectEndpoint.value]"
-          },
-          "foundryModelDeployment": {
-            "value": "gpt-4.1-mini"
-          },
-          "appInsightsConnectionString": {
-            "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('effectiveResourceGroupName')), 'Microsoft.Resources/deployments', 'deploy-observability'), '2022-09-01').outputs.appInsightsConnectionString.value]"
-          },
-          "cosmosAccountName": {
-            "value": "[variables('effectiveCosmosName')]"
-          },
-          "cosmosPrivateEndpointName": {
-            "value": "[format('pe-{0}', variables('effectiveCosmosName'))]"
+          "pollerIntervalSeconds": {
+            "value": "[parameters('evalPollerIntervalSeconds')]"
           }
         },
         "template": {
@@ -2540,7 +2358,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.33.93.31351",
-              "templateHash": "8694456944127647373"
+              "templateHash": "7326332675834036523"
             }
           },
           "parameters": {
@@ -2880,7 +2698,7 @@
                   "containers": [
                     {
                       "name": "eval-service",
-                      "image": "[if(not(empty(if(parameters('containerAppExists'), coalesce(tryGet(tryGet(tryGet(tryGet(reference(resourceId('Microsoft.App/containerApps', parameters('containerAppName')), '2024-10-02-preview', 'full'), 'properties'), 'template'), 'containers', 0), 'image'), ''), ''))), if(parameters('containerAppExists'), coalesce(tryGet(tryGet(tryGet(tryGet(reference(resourceId('Microsoft.App/containerApps', parameters('containerAppName')), '2024-10-02-preview', 'full'), 'properties'), 'template'), 'containers', 0), 'image'), ''), ''), parameters('containerImage'))]",
+                      "image": "[if(not(empty(if(parameters('containerAppExists'), reference(resourceId('Microsoft.App/containerApps', parameters('containerAppName')), '2024-10-02-preview').template.containers[0].image, ''))), if(parameters('containerAppExists'), reference(resourceId('Microsoft.App/containerApps', parameters('containerAppName')), '2024-10-02-preview').template.containers[0].image, ''), parameters('containerImage'))]",
                       "resources": {
                         "cpu": "[json('0.5')]",
                         "memory": "1Gi"
@@ -2979,273 +2797,102 @@
         }
       },
       "dependsOn": [
-        "[extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('effectiveResourceGroupName')), 'Microsoft.Resources/deployments', 'deploy-acr')]",
-        "[extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('effectiveResourceGroupName')), 'Microsoft.Resources/deployments', 'deploy-cae')]",
-        "[extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('effectiveResourceGroupName')), 'Microsoft.Resources/deployments', 'deploy-foundry')]",
-        "[extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('effectiveResourceGroupName')), 'Microsoft.Resources/deployments', 'deploy-identity')]",
-        "[extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('effectiveResourceGroupName')), 'Microsoft.Resources/deployments', 'deploy-network')]",
-        "[extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('effectiveResourceGroupName')), 'Microsoft.Resources/deployments', 'deploy-observability')]",
-        "[subscriptionResourceId('Microsoft.Resources/resourceGroups', variables('effectiveResourceGroupName'))]"
-      ]
-    },
-    {
-      "condition": "[not(empty(parameters('principalId')))]",
-      "type": "Microsoft.Resources/deployments",
-      "apiVersion": "2022-09-01",
-      "name": "deploy-developer-rbac",
-      "resourceGroup": "[variables('effectiveResourceGroupName')]",
-      "properties": {
-        "expressionEvaluationOptions": {
-          "scope": "inner"
-        },
-        "mode": "Incremental",
-        "parameters": {
-          "principalId": {
-            "value": "[parameters('principalId')]"
-          },
-          "principalType": {
-            "value": "User"
-          },
-          "storageAccountName": {
-            "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('effectiveResourceGroupName')), 'Microsoft.Resources/deployments', 'deploy-storage'), '2022-09-01').outputs.storageAccountName.value]"
-          },
-          "searchServiceName": {
-            "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('effectiveResourceGroupName')), 'Microsoft.Resources/deployments', 'deploy-search'), '2022-09-01').outputs.searchServiceName.value]"
-          },
-          "aiServicesAccountName": {
-            "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('effectiveResourceGroupName')), 'Microsoft.Resources/deployments', 'deploy-foundry'), '2022-09-01').outputs.accountName.value]"
-          },
-          "acrName": {
-            "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('effectiveResourceGroupName')), 'Microsoft.Resources/deployments', 'deploy-acr'), '2022-09-01').outputs.acrName.value]"
-          }
-        },
-        "template": {
-          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
-          "contentVersion": "1.0.0.0",
-          "metadata": {
-            "_generator": {
-              "name": "bicep",
-              "version": "0.33.93.31351",
-              "templateHash": "17856516085416343975"
-            }
-          },
-          "parameters": {
-            "principalId": {
-              "type": "string",
-              "defaultValue": "",
-              "metadata": {
-                "description": "Object ID of the user or service principal receiving the demo roles. Empty disables all assignments."
-              }
-            },
-            "principalType": {
-              "type": "string",
-              "defaultValue": "User",
-              "allowedValues": [
-                "User",
-                "ServicePrincipal",
-                "Group"
-              ],
-              "metadata": {
-                "description": "Principal type. Use \"User\" for human OID, \"ServicePrincipal\" for app/SP/managed identity."
-              }
-            },
-            "storageAccountName": {
-              "type": "string",
-              "metadata": {
-                "description": "Storage account name to grant Storage Blob Data Contributor on."
-              }
-            },
-            "searchServiceName": {
-              "type": "string",
-              "metadata": {
-                "description": "AI Search service name to grant Search Index Data Contributor on."
-              }
-            },
-            "aiServicesAccountName": {
-              "type": "string",
-              "metadata": {
-                "description": "AIServices account name to grant Cognitive Services User on."
-              }
-            },
-            "acrName": {
-              "type": "string",
-              "metadata": {
-                "description": "Container registry name to grant AcrPush on."
-              }
-            }
-          },
-          "variables": {
-            "blobDataContributorRoleId": "ba92f5b4-2d11-453d-a403-e96b0029c9fe",
-            "searchIndexDataContributorRoleId": "8ebe5a00-799e-43f5-93ac-243d3dce84a7",
-            "cognitiveServicesUserRoleId": "a97b65f3-24c7-4388-baec-2e87135dc908",
-            "acrPushRoleId": "8311e382-0749-4cb8-b61a-304f252e45ec",
-            "assignmentsEnabled": "[not(empty(parameters('principalId')))]"
-          },
-          "resources": [
-            {
-              "condition": "[variables('assignmentsEnabled')]",
-              "type": "Microsoft.Authorization/roleAssignments",
-              "apiVersion": "2022-04-01",
-              "scope": "[format('Microsoft.Storage/storageAccounts/{0}', parameters('storageAccountName'))]",
-              "name": "[guid(resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccountName')), parameters('principalId'), variables('blobDataContributorRoleId'))]",
-              "properties": {
-                "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('blobDataContributorRoleId'))]",
-                "principalId": "[parameters('principalId')]",
-                "principalType": "[parameters('principalType')]"
-              }
-            },
-            {
-              "condition": "[variables('assignmentsEnabled')]",
-              "type": "Microsoft.Authorization/roleAssignments",
-              "apiVersion": "2022-04-01",
-              "scope": "[format('Microsoft.Search/searchServices/{0}', parameters('searchServiceName'))]",
-              "name": "[guid(resourceId('Microsoft.Search/searchServices', parameters('searchServiceName')), parameters('principalId'), variables('searchIndexDataContributorRoleId'))]",
-              "properties": {
-                "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('searchIndexDataContributorRoleId'))]",
-                "principalId": "[parameters('principalId')]",
-                "principalType": "[parameters('principalType')]"
-              }
-            },
-            {
-              "condition": "[variables('assignmentsEnabled')]",
-              "type": "Microsoft.Authorization/roleAssignments",
-              "apiVersion": "2022-04-01",
-              "scope": "[format('Microsoft.CognitiveServices/accounts/{0}', parameters('aiServicesAccountName'))]",
-              "name": "[guid(resourceId('Microsoft.CognitiveServices/accounts', parameters('aiServicesAccountName')), parameters('principalId'), variables('cognitiveServicesUserRoleId'))]",
-              "properties": {
-                "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('cognitiveServicesUserRoleId'))]",
-                "principalId": "[parameters('principalId')]",
-                "principalType": "[parameters('principalType')]"
-              }
-            },
-            {
-              "condition": "[variables('assignmentsEnabled')]",
-              "type": "Microsoft.Authorization/roleAssignments",
-              "apiVersion": "2022-04-01",
-              "scope": "[format('Microsoft.ContainerRegistry/registries/{0}', parameters('acrName'))]",
-              "name": "[guid(resourceId('Microsoft.ContainerRegistry/registries', parameters('acrName')), parameters('principalId'), variables('acrPushRoleId'))]",
-              "properties": {
-                "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('acrPushRoleId'))]",
-                "principalId": "[parameters('principalId')]",
-                "principalType": "[parameters('principalType')]"
-              }
-            }
-          ]
-        }
-      },
-      "dependsOn": [
-        "[extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('effectiveResourceGroupName')), 'Microsoft.Resources/deployments', 'deploy-acr')]",
-        "[extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('effectiveResourceGroupName')), 'Microsoft.Resources/deployments', 'deploy-foundry')]",
-        "[subscriptionResourceId('Microsoft.Resources/resourceGroups', variables('effectiveResourceGroupName'))]",
-        "[extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('effectiveResourceGroupName')), 'Microsoft.Resources/deployments', 'deploy-search')]",
-        "[extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('effectiveResourceGroupName')), 'Microsoft.Resources/deployments', 'deploy-storage')]"
+        "[resourceId('Microsoft.Resources/deployments', 'deploy-cae')]",
+        "[resourceId('Microsoft.Resources/deployments', 'deploy-foundry')]",
+        "[resourceId('Microsoft.Resources/deployments', 'deploy-identity')]",
+        "[resourceId('Microsoft.Resources/deployments', 'deploy-network')]",
+        "[resourceId('Microsoft.Resources/deployments', 'deploy-observability')]"
       ]
     }
   ],
   "outputs": {
-    "AZURE_LOCATION": {
+    "vnetId": {
       "type": "string",
-      "value": "[parameters('location')]"
+      "value": "[reference(resourceId('Microsoft.Resources/deployments', 'deploy-network'), '2022-09-01').outputs.vnetId.value]"
     },
-    "AZURE_TENANT_ID": {
+    "caeSubnetId": {
       "type": "string",
-      "value": "[tenant().tenantId]"
+      "value": "[reference(resourceId('Microsoft.Resources/deployments', 'deploy-network'), '2022-09-01').outputs.caeSubnetId.value]"
     },
-    "AZURE_RESOURCE_GROUP": {
+    "peSubnetId": {
       "type": "string",
-      "value": "[variables('effectiveResourceGroupName')]"
+      "value": "[reference(resourceId('Microsoft.Resources/deployments', 'deploy-network'), '2022-09-01').outputs.peSubnetId.value]"
     },
-    "AZURE_CONTAINER_REGISTRY_NAME": {
+    "cosmosDnsZoneId": {
       "type": "string",
-      "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('effectiveResourceGroupName')), 'Microsoft.Resources/deployments', 'deploy-acr'), '2022-09-01').outputs.acrName.value]"
+      "value": "[reference(resourceId('Microsoft.Resources/deployments', 'deploy-network'), '2022-09-01').outputs.cosmosDnsZoneId.value]"
     },
-    "AZURE_CONTAINER_REGISTRY_ENDPOINT": {
+    "blobDnsZoneId": {
       "type": "string",
-      "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('effectiveResourceGroupName')), 'Microsoft.Resources/deployments', 'deploy-acr'), '2022-09-01').outputs.loginServer.value]"
+      "value": "[reference(resourceId('Microsoft.Resources/deployments', 'deploy-network'), '2022-09-01').outputs.blobDnsZoneId.value]"
     },
-    "AZURE_CONTAINER_ENVIRONMENT_NAME": {
+    "workspaceId": {
       "type": "string",
-      "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('effectiveResourceGroupName')), 'Microsoft.Resources/deployments', 'deploy-cae'), '2022-09-01').outputs.vnetEnvName.value]"
+      "value": "[reference(resourceId('Microsoft.Resources/deployments', 'deploy-observability'), '2022-09-01').outputs.workspaceId.value]"
     },
-    "AZURE_CONTAINER_ENVIRONMENT_DEFAULT_DOMAIN": {
+    "appInsightsId": {
       "type": "string",
-      "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('effectiveResourceGroupName')), 'Microsoft.Resources/deployments', 'deploy-cae'), '2022-09-01').outputs.vnetEnvDefaultDomain.value]"
+      "value": "[reference(resourceId('Microsoft.Resources/deployments', 'deploy-observability'), '2022-09-01').outputs.appInsightsId.value]"
     },
-    "SERVICE_WEB_NAME": {
+    "appInsightsConnectionString": {
       "type": "string",
-      "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('effectiveResourceGroupName')), 'Microsoft.Resources/deployments', 'deploy-static-web-app'), '2022-09-01').outputs.staticWebAppName.value]"
+      "value": "[reference(resourceId('Microsoft.Resources/deployments', 'deploy-observability'), '2022-09-01').outputs.appInsightsConnectionString.value]"
     },
-    "SERVICE_WEB_URI": {
+    "webTestId": {
       "type": "string",
-      "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('effectiveResourceGroupName')), 'Microsoft.Resources/deployments', 'deploy-static-web-app'), '2022-09-01').outputs.staticWebAppUrl.value]"
+      "value": "[reference(resourceId('Microsoft.Resources/deployments', 'deploy-observability'), '2022-09-01').outputs.webTestId.value]"
     },
-    "SERVICE_STORAGE_PROXY_NAME": {
+    "legacyCaeId": {
       "type": "string",
-      "value": "[parameters('storageProxyAppName')]"
+      "value": "[reference(resourceId('Microsoft.Resources/deployments', 'deploy-cae'), '2022-09-01').outputs.legacyEnvId.value]"
     },
-    "SERVICE_STORAGE_PROXY_URI": {
+    "vnetCaeId": {
       "type": "string",
-      "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('effectiveResourceGroupName')), 'Microsoft.Resources/deployments', 'deploy-storage-proxy'), '2022-09-01').outputs.storageProxyUrl.value]"
+      "value": "[reference(resourceId('Microsoft.Resources/deployments', 'deploy-cae'), '2022-09-01').outputs.vnetEnvId.value]"
     },
-    "SERVICE_EVAL_SERVICE_NAME": {
+    "evalServiceIdentityId": {
       "type": "string",
-      "value": "[parameters('evalServiceAppName')]"
+      "value": "[reference(resourceId('Microsoft.Resources/deployments', 'deploy-identity'), '2022-09-01').outputs.evalServiceIdentityId.value]"
     },
-    "SERVICE_EVAL_SERVICE_URI": {
+    "storageProxyIdentityId": {
       "type": "string",
-      "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('effectiveResourceGroupName')), 'Microsoft.Resources/deployments', 'deploy-eval-service'), '2022-09-01').outputs.evalServiceUrl.value]"
+      "value": "[reference(resourceId('Microsoft.Resources/deployments', 'deploy-identity'), '2022-09-01').outputs.storageProxyIdentityId.value]"
     },
-    "APPLICATIONINSIGHTS_CONNECTION_STRING": {
+    "searchServiceId": {
       "type": "string",
-      "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('effectiveResourceGroupName')), 'Microsoft.Resources/deployments', 'deploy-observability'), '2022-09-01').outputs.appInsightsConnectionString.value]"
+      "value": "[reference(resourceId('Microsoft.Resources/deployments', 'deploy-search'), '2022-09-01').outputs.searchServiceId.value]"
     },
-    "APPLICATIONINSIGHTS_NAME": {
+    "searchEndpoint": {
       "type": "string",
-      "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('effectiveResourceGroupName')), 'Microsoft.Resources/deployments', 'deploy-observability'), '2022-09-01').outputs.appInsightsName.value]"
+      "value": "[reference(resourceId('Microsoft.Resources/deployments', 'deploy-search'), '2022-09-01').outputs.searchEndpoint.value]"
     },
-    "AZURE_LOG_ANALYTICS_WORKSPACE_NAME": {
+    "storageAccountId": {
       "type": "string",
-      "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('effectiveResourceGroupName')), 'Microsoft.Resources/deployments', 'deploy-observability'), '2022-09-01').outputs.workspaceName.value]"
+      "value": "[reference(resourceId('Microsoft.Resources/deployments', 'deploy-storage'), '2022-09-01').outputs.storageAccountId.value]"
     },
-    "AZURE_SEARCH_ENDPOINT": {
+    "storagePeId": {
       "type": "string",
-      "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('effectiveResourceGroupName')), 'Microsoft.Resources/deployments', 'deploy-search'), '2022-09-01').outputs.searchEndpoint.value]"
+      "value": "[reference(resourceId('Microsoft.Resources/deployments', 'deploy-storage-pe'), '2022-09-01').outputs.privateEndpointId.value]"
     },
-    "AZURE_SEARCH_SERVICE_NAME": {
+    "foundryAccountId": {
       "type": "string",
-      "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('effectiveResourceGroupName')), 'Microsoft.Resources/deployments', 'deploy-search'), '2022-09-01').outputs.searchServiceName.value]"
+      "value": "[reference(resourceId('Microsoft.Resources/deployments', 'deploy-foundry'), '2022-09-01').outputs.accountId.value]"
     },
-    "AZURE_STORAGE_ACCOUNT_NAME": {
+    "foundryProjectEndpoint": {
       "type": "string",
-      "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('effectiveResourceGroupName')), 'Microsoft.Resources/deployments', 'deploy-storage'), '2022-09-01').outputs.storageAccountName.value]"
+      "value": "[reference(resourceId('Microsoft.Resources/deployments', 'deploy-foundry'), '2022-09-01').outputs.projectEndpoint.value]"
     },
-    "AZURE_STORAGE_PRIMARY_BLOB_ENDPOINT": {
+    "staticWebAppUrl": {
       "type": "string",
-      "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('effectiveResourceGroupName')), 'Microsoft.Resources/deployments', 'deploy-storage'), '2022-09-01').outputs.storageAccountPrimaryEndpoint.value]"
+      "value": "[reference(resourceId('Microsoft.Resources/deployments', 'deploy-staticwebapp'), '2022-09-01').outputs.staticWebAppUrl.value]"
     },
-    "AZURE_AISERVICES_ACCOUNT_NAME": {
+    "storageProxyUrl": {
       "type": "string",
-      "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('effectiveResourceGroupName')), 'Microsoft.Resources/deployments', 'deploy-foundry'), '2022-09-01').outputs.accountName.value]"
+      "value": "[reference(resourceId('Microsoft.Resources/deployments', 'deploy-storage-proxy'), '2022-09-01').outputs.storageProxyUrl.value]"
     },
-    "AZURE_AISERVICES_ACCOUNT_ENDPOINT": {
+    "evalServiceUrl": {
       "type": "string",
-      "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('effectiveResourceGroupName')), 'Microsoft.Resources/deployments', 'deploy-foundry'), '2022-09-01').outputs.accountEndpoint.value]"
-    },
-    "FOUNDRY_PROJECT_NAME": {
-      "type": "string",
-      "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('effectiveResourceGroupName')), 'Microsoft.Resources/deployments', 'deploy-foundry'), '2022-09-01').outputs.projectName.value]"
-    },
-    "FOUNDRY_PROJECT_ENDPOINT": {
-      "type": "string",
-      "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('effectiveResourceGroupName')), 'Microsoft.Resources/deployments', 'deploy-foundry'), '2022-09-01').outputs.projectEndpoint.value]"
-    },
-    "AZURE_COSMOS_ACCOUNT_NAME": {
-      "type": "string",
-      "value": "[variables('effectiveCosmosName')]"
-    },
-    "AZURE_COSMOS_ENDPOINT": {
-      "type": "string",
-      "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('effectiveResourceGroupName')), 'Microsoft.Resources/deployments', 'deploy-eval-service'), '2022-09-01').outputs.cosmosEndpoint.value]"
+      "value": "[reference(resourceId('Microsoft.Resources/deployments', 'deploy-eval-service'), '2022-09-01').outputs.evalServiceUrl.value]"
     }
   }
 }

@@ -18,8 +18,11 @@ param containerAppName string = 'ca-storage-proxy'
 @description('Resource ID of the VNet-injected Container Apps managed environment.')
 param containerAppEnvResourceId string
 
-@description('Fully qualified image reference, e.g. cronlgvc76rbuge.azurecr.io/storage-proxy:v2.')
-param containerImage string
+@description('Fully qualified image reference, e.g. <acr>.azurecr.io/storage-proxy:v2. When `containerAppExists` is true and a live image is present, the existing image wins (azd-style image preservation).')
+param containerImage string = 'mcr.microsoft.com/azuredocs/containerapps-helloworld:latest'
+
+@description('When true, the module reads the live container app image and preserves it across redeploys. Set this to the value of azd\'s SERVICE_STORAGE_PROXY_RESOURCE_EXISTS environment variable.')
+param containerAppExists bool = false
 
 @description('Resource ID of the storage-proxy UAMI.')
 param userAssignedIdentityResourceId string
@@ -32,6 +35,9 @@ param userAssignedIdentityPrincipalId string
 
 @description('Resource ID of the Azure Container Registry hosting the image. Used for managed-identity ACR pull.')
 param acrResourceId string = ''
+
+@description('Optional explicit ACR login server (e.g. cronlgvc76rbuge.azurecr.io). When empty, derived from acrResourceId.')
+param acrLoginServer string = ''
 
 @description('Name of the storage account the proxy talks to. Surfaced as AZURE_STORAGE_ACCOUNT_NAME.')
 param storageAccountName string
@@ -64,6 +70,19 @@ var blobDataContributorRoleId = 'ba92f5b4-2d11-453d-a403-e96b0029c9fe'
 resource storageAccount 'Microsoft.Storage/storageAccounts@2024-01-01' existing = {
   name: storageAccountName
 }
+
+// Reference the existing container app (when it has been deployed before)
+// so we can preserve the image previously pushed by `azd deploy`. Without
+// this guard, every `azd provision` would reset the image to the placeholder.
+resource existingStorageProxy 'Microsoft.App/containerApps@2024-10-02-preview' existing = if (containerAppExists) {
+  name: containerAppName
+}
+
+var liveImage = containerAppExists ? (existingStorageProxy.?properties.?template.?containers[0].?image ?? '') : ''
+var effectiveImage = !empty(liveImage) ? liveImage : containerImage
+var effectiveLoginServer = !empty(acrLoginServer)
+  ? acrLoginServer
+  : (!empty(acrResourceId) ? '${split(last(split(acrResourceId, '/')), '.')[0]}.azurecr.io' : '')
 
 resource blobDataAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
   name: guid(storageAccount.id, userAssignedIdentityResourceId, blobDataContributorRoleId)
@@ -105,9 +124,9 @@ resource storageProxy 'Microsoft.App/containerApps@2024-10-02-preview' = {
         transport: 'auto'
         allowInsecure: false
       }
-      registries: !empty(acrResourceId) ? [
+      registries: !empty(effectiveLoginServer) ? [
         {
-          server: '${split(last(split(acrResourceId, '/')), '.')[0]}.azurecr.io'
+          server: effectiveLoginServer
           identity: userAssignedIdentityResourceId
         }
       ] : []
@@ -116,7 +135,7 @@ resource storageProxy 'Microsoft.App/containerApps@2024-10-02-preview' = {
       containers: [
         {
           name: 'storage-proxy'
-          image: containerImage
+          image: effectiveImage
           resources: {
             cpu: json(cpu)
             memory: memory
