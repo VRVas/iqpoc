@@ -280,7 +280,7 @@ function AgentsPageContent() {
     <div className="space-y-6">
       <PageHeader
         title="Agents"
-        description={isAdmin ? "Foundry agents powered by Azure AI Search knowledge" : "Choose an agent to start a conversation"}
+        description={isAdmin ? "Foundry agents powered by Foundry IQ and Foundry Tools" : "Choose an agent to start a conversation"}
         primaryAction={isAdmin ? {
           label: 'Create Agent',
           onClick: () => router.push('/agent-builder'),
@@ -292,7 +292,7 @@ function AgentsPageContent() {
         <EmptyState
           icon={Bot20Regular}
           title="No agents yet"
-          description="Create your first Foundry agent to start chatting with your knowledge bases."
+          description="Create your Foundry agent, connect it to tools and knowledge bases, and start chatting!"
           action={{
             label: 'Create Agent',
             onClick: () => router.push('/agent-builder'),

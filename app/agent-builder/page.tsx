@@ -18,7 +18,8 @@ import {
   CodeText20Regular,
   History20Regular,
   Delete20Regular,
-  Airplane20Regular
+  Airplane20Regular,
+  ArrowSwap20Regular
 } from '@fluentui/react-icons'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
@@ -58,11 +59,19 @@ interface KnowledgeBase {
 type Section = 'model' | 'tools' | 'instructions' | 'knowledge'
 type AgentMode = 'foundry' | 'search'
 
-const SECTIONS = [
-  { id: 'model' as Section, label: 'Model', icon: Bot20Regular },
-  { id: 'tools' as Section, label: 'Tools', icon: Code20Regular },
-  { id: 'instructions' as Section, label: 'Instructions', icon: BookInformation20Regular },
-  { id: 'knowledge' as Section, label: 'Knowledge', icon: Database20Regular },
+type SectionEntry = {
+  id: Section | 'a2a-config'
+  label: string
+  icon: typeof Bot20Regular
+  comingSoon?: boolean
+}
+
+const SECTIONS: SectionEntry[] = [
+  { id: 'model', label: 'Model', icon: Bot20Regular },
+  { id: 'tools', label: 'Tools', icon: Code20Regular },
+  { id: 'a2a-config', label: 'A2A Configuration', icon: ArrowSwap20Regular, comingSoon: true },
+  { id: 'instructions', label: 'Instructions', icon: BookInformation20Regular },
+  { id: 'knowledge', label: 'Knowledge', icon: Database20Regular },
 ]
 
 function AgentBuilderPageContent() {
@@ -1126,6 +1135,26 @@ function AgentBuilderPageContent() {
                   <div className="text-[10px] text-fg-subtle mt-1\">Not available in this demo</div>
                 </div>
               </label>
+
+              {/* "More coming soon" teaser pill */}
+              <div className="pt-2 flex justify-center">
+                <div
+                  className="group relative inline-flex items-center gap-2 px-4 py-2 rounded-full text-xs font-medium text-fg-default
+                             bg-gradient-to-r from-accent/10 via-accent/15 to-accent/10
+                             border border-accent/30 shadow-sm
+                             hover:shadow-md hover:border-accent/50 transition-all duration-300
+                             cursor-default select-none"
+                >
+                  <span className="relative flex h-2 w-2">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-accent opacity-60" />
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-accent" />
+                  </span>
+                  <span className="bg-gradient-to-r from-accent to-fg-default bg-clip-text text-transparent font-semibold tracking-wide">
+                    More tools coming soon
+                  </span>
+                  <span aria-hidden className="text-accent/70 group-hover:translate-x-0.5 transition-transform">→</span>
+                </div>
+              </div>
             </div>
           </div>
         )
@@ -2078,10 +2107,28 @@ function AgentBuilderPageContent() {
           <div className="space-y-1">
             {SECTIONS.map((section) => {
               const Icon = section.icon
+              if (section.comingSoon) {
+                return (
+                  <div
+                    key={section.id}
+                    aria-disabled="true"
+                    title={`${section.label} — Coming soon`}
+                    className={cn(
+                      "w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-fg-muted opacity-60 cursor-not-allowed select-none"
+                    )}
+                  >
+                    <Icon className="h-5 w-5" />
+                    <span>{section.label}</span>
+                    <span className="ml-auto text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded bg-fg-muted/15 text-fg-muted font-semibold">
+                      Soon
+                    </span>
+                  </div>
+                )
+              }
               return (
                 <button
                   key={section.id}
-                  onClick={() => setActiveSection(section.id)}
+                  onClick={() => setActiveSection(section.id as Section)}
                   className={cn(
                     "w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors",
                     activeSection === section.id

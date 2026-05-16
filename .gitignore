@@ -54,6 +54,12 @@ ext-install.txt
 mi-create.txt
 rbac*.txt
 
+# Azure CLI JSON dumps (scratch — re-fetch with `az ... -o json` as needed)
+caconfig.json
+cosmos.json
+role-*.json
+tokens.json
+
 # Eval service test output
 eval-service/test-results*.txt
 eval-service/test-final.txt

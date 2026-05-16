@@ -14,6 +14,8 @@ import {
   Dismiss20Regular,
   DocumentBulletList20Regular,
   DataBarVertical20Regular,
+  Pulse20Regular,
+  Wrench20Regular,
 } from '@fluentui/react-icons'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
@@ -25,13 +27,16 @@ interface NavItem {
   href: string
   label: string
   icon: React.ComponentType<{ className?: string }>
+  comingSoon?: boolean
 }
 
 const navigation: NavItem[] = [
   { href: '/agents', label: 'Agents', icon: Bot20Regular },
   { href: '/test', label: 'Playground', icon: Play20Regular },
+  { href: '/tool-customization', label: 'Tool Customization', icon: Wrench20Regular, comingSoon: true },
   { href: '/knowledge', label: 'Knowledge', icon: Database20Regular },
   { href: '/knowledge-sources', label: 'Knowledge Sources', icon: DocumentBulletList20Regular },
+  { href: '/tracing', label: 'Tracing', icon: Pulse20Regular, comingSoon: true },
   { href: '/evaluations', label: 'Evaluations', icon: DataBarVertical20Regular },
 ]
 
@@ -395,6 +400,33 @@ interface SidebarLinkProps {
 
 function SidebarLink({ item, isActive, onClick, collapsed }: SidebarLinkProps) {
   const Icon = item.icon
+
+  // Coming-soon items render as non-interactive, with a 'Soon' badge
+  if (item.comingSoon) {
+    const tooltipLabel = `${item.label} — Coming soon`
+    const disabledEl = (
+      <div
+        aria-disabled="true"
+        title={tooltipLabel}
+        className={cn(
+          'group relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-fg-muted opacity-60 cursor-not-allowed select-none',
+          collapsed && 'justify-center px-0'
+        )}
+      >
+        <Icon className="h-5 w-5 flex-shrink-0 text-fg-muted" />
+        {!collapsed && (
+          <>
+            <span className="truncate tracking-tight">{item.label}</span>
+            <span className="ml-auto text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded bg-fg-muted/15 text-fg-muted font-semibold">
+              Soon
+            </span>
+          </>
+        )}
+      </div>
+    )
+    return collapsed ? <Tooltip content={tooltipLabel} side="right">{disabledEl}</Tooltip> : disabledEl
+  }
+
   // Admin sidebar links always include ?edit=admin
   const href = `${item.href}?edit=admin`
 
