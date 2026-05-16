@@ -19,6 +19,7 @@
   "agentPrefix": "",
   "excludeKbPrefixes": ["zava-"],
   "excludeAgentPrefixes": ["zava-"],
+  "excludeNameSubstrings": ["zava"],
 
   "timeZone": "Asia/Qatar",
   "timeZoneLabel": "Doha time (UTC+3)",

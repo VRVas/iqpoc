@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { getServerTenant, isOwnedContainer } from '@/lib/tenant'
 
 const PROXY_URL = process.env.STORAGE_PROXY_URL || ''
 
@@ -10,6 +11,15 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'STORAGE_PROXY_URL not configured' }, { status: 500 })
   }
   try {
+    // Tenant data isolation: peek at the target container via the `?container=`
+    // query param so we can gate WITHOUT consuming the multipart body. The
+    // client passes the same name in the form data — keep both in sync.
+    const { searchParams } = new URL(req.url)
+    const container = searchParams.get('container')
+    if (container && !isOwnedContainer(container, getServerTenant())) {
+      return NextResponse.json({ error: 'Container not found' }, { status: 404 })
+    }
+
     // Forward the multipart request as-is to the storage proxy
     const contentType = req.headers.get('content-type') || ''
     const body = await req.arrayBuffer()

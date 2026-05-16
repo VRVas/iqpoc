@@ -269,7 +269,9 @@ export async function createKnowledgeSource(sourceData: any): Promise<any> {
 
   if (!response.ok) {
     const errorData = await response.json()
-    throw new Error(errorData.error || 'Failed to create knowledge source')
+    // Prefer the tenant-isolation `hint` (e.g. '"zava" is not permitted in the name.')
+    // when the API surfaces one, so the toast carries the actionable message.
+    throw new Error(errorData.hint || errorData.error || 'Failed to create knowledge source')
   }
 
   return response.json()

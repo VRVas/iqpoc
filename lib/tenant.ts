@@ -42,6 +42,25 @@ export interface TenantConfig {
   excludeKbPrefixes?: string[]
   excludeAgentPrefixes?: string[]
 
+  /**
+   * Prefix enforced for knowledge sources owned by this tenant. If omitted,
+   * falls back to `kbPrefix`. Used by the shared-resource isolation helpers.
+   */
+  knowledgeSourcePrefix?: string
+  /**
+   * Prefix enforced for shared-storage blob containers owned by this tenant.
+   * If omitted, falls back to `kbPrefix`.
+   */
+  containerPrefix?: string
+  /**
+   * Case-insensitive substrings that, when present anywhere in a name,
+   * disqualify it from belonging to this tenant. Applies to knowledge sources
+   * AND blob containers — both of which live in single Azure resources that
+   * are shared across every tenant deployment. Stronger than a prefix exclude
+   * (catches names like `mid-zava-name`, not just `zava-name`).
+   */
+  excludeNameSubstrings?: string[]
+
   timeZone: string
   timeZoneLabel: string
 
@@ -140,4 +159,80 @@ export function isOwnedAgent(name: string | undefined | null, t: TenantConfig = 
     if (p && name.startsWith(p)) return false
   }
   return true
+}
+
+function resolveKnowledgeSourcePrefix(t: TenantConfig): string {
+  return t.knowledgeSourcePrefix ?? t.kbPrefix ?? ''
+}
+
+function resolveContainerPrefix(t: TenantConfig): string {
+  return t.containerPrefix ?? t.kbPrefix ?? ''
+}
+
+/** Returns the matching substring (verbatim from config) if `name` is banned, else null. */
+function nameContainsExcludedSubstring(name: string, t: TenantConfig): string | null {
+  const lc = name.toLowerCase()
+  for (const sub of t.excludeNameSubstrings ?? []) {
+    if (sub && lc.includes(sub.toLowerCase())) return sub
+  }
+  return null
+}
+
+/**
+ * True when a knowledge source `name` belongs to `t`. Knowledge sources live
+ * in a single Azure AI Search instance shared by every tenant, so this is the
+ * sole gate preventing cross-tenant visibility through our API.
+ */
+export function isOwnedKnowledgeSource(
+  name: string | undefined | null,
+  t: TenantConfig = tenant
+): boolean {
+  if (!name) return false
+  const prefix = resolveKnowledgeSourcePrefix(t)
+  if (prefix && !name.startsWith(prefix)) return false
+  if (nameContainsExcludedSubstring(name, t)) return false
+  return true
+}
+
+/**
+ * True when a shared-storage blob container `name` belongs to `t`. Same
+ * single-resource sharing story as `isOwnedKnowledgeSource`.
+ */
+export function isOwnedContainer(
+  name: string | undefined | null,
+  t: TenantConfig = tenant
+): boolean {
+  if (!name) return false
+  const prefix = resolveContainerPrefix(t)
+  if (prefix && !name.startsWith(prefix)) return false
+  if (nameContainsExcludedSubstring(name, t)) return false
+  return true
+}
+
+/**
+ * Validate that a name being CREATED is acceptable for the current tenant.
+ * Returns `{ ok: true }` on success or `{ ok: false, reason }` with a clean
+ * human-readable message so API routes can render a 400 with a tenant-specific
+ * hint rather than letting Azure reject the call with a more confusing
+ * downstream error.
+ *
+ * Returns a single object shape (rather than a discriminated union) so it
+ * works under `strict: false` where TS narrowing on `!result.ok` is weaker.
+ */
+export function validateOwnedName(
+  name: string | undefined | null,
+  kind: 'knowledgeSource' | 'container',
+  t: TenantConfig = tenant
+): { ok: boolean; reason?: string } {
+  if (!name) return { ok: false, reason: 'Name is required.' }
+  const prefix =
+    kind === 'knowledgeSource' ? resolveKnowledgeSourcePrefix(t) : resolveContainerPrefix(t)
+  if (prefix && !name.startsWith(prefix)) {
+    return { ok: false, reason: `Name must start with "${prefix}".` }
+  }
+  const hit = nameContainsExcludedSubstring(name, t)
+  if (hit) {
+    return { ok: false, reason: `"${hit}" is not permitted in the name.` }
+  }
+  return { ok: true }
 }

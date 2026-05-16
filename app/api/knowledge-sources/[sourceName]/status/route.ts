@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { getServerTenant, isOwnedKnowledgeSource } from '@/lib/tenant'
 
 // Force dynamic rendering - this route always needs fresh data
 export const dynamic = 'force-dynamic'
@@ -35,6 +36,16 @@ export async function GET(_request: NextRequest, context: RouteContext) {
       return NextResponse.json(
         { error: 'Source name is required' },
         { status: 400 }
+      )
+    }
+
+    // Tenant data isolation: refuse to leak status for a knowledge source that
+    // doesn't belong to the requesting tenant. Mirrors the 404 used by the KB
+    // single-resource route so callers can't probe for sibling-tenant names.
+    if (!isOwnedKnowledgeSource(sourceName, getServerTenant())) {
+      return NextResponse.json(
+        { error: 'Knowledge source not found' },
+        { status: 404 }
       )
     }
 

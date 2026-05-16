@@ -282,7 +282,8 @@ function QuickCreateKnowledgeSourcePageContent() {
     try {
       const resp = await fetch('/api/storage/containers', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name }) })
       const data = await resp.json()
-      if (!resp.ok) throw new Error(data.error)
+      // Prefer the tenant-isolation `hint` (e.g. '"zava" is not permitted in the name.') over the generic top-level error.
+      if (!resp.ok) throw new Error(data.hint || data.error)
       if (!containers.includes(name)) setContainers(prev => [...prev, name])
       toast({ title: 'Container created', description: name, type: 'success' })
     } catch (err: any) {
@@ -330,7 +331,10 @@ function QuickCreateKnowledgeSourcePageContent() {
         formData.append('container', config.containerName || '')
         if (config.folderPath) formData.append('folder', config.folderPath)
         for (const f of files) formData.append('files', f)
-        const uploadResp = await fetch('/api/storage/upload', { method: 'POST', body: formData })
+        // Pass container in the query string so the server can gate the upload
+        // by tenant ownership without parsing the multipart body.
+        const uploadUrl = `/api/storage/upload?container=${encodeURIComponent(config.containerName || '')}`
+        const uploadResp = await fetch(uploadUrl, { method: 'POST', body: formData })
         const uploadData = await uploadResp.json()
         if (!uploadResp.ok) throw new Error(uploadData.error || 'Upload failed')
         toast({ title: 'Files uploaded', description: `${uploadData.count} file${uploadData.count !== 1 ? 's' : ''}`, type: 'success' })

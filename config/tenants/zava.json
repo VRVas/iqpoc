@@ -17,6 +17,8 @@
 
   "kbPrefix": "zava-",
   "agentPrefix": "zava-",
+  "knowledgeSourcePrefix": "zava-",
+  "containerPrefix": "zava-",
 
   "timeZone": "America/Los_Angeles",
   "timeZoneLabel": "Pacific time",

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { getServerTenant, isOwnedKnowledgeSource, validateOwnedName } from '@/lib/tenant'
 
 // Force dynamic rendering - this route always needs fresh data
 export const dynamic = 'force-dynamic'
@@ -37,6 +38,15 @@ export async function GET() {
 
     const data = await response.json()
 
+    // Tenant data isolation: knowledge sources live in a single Azure AI Search
+    // service shared by every tenant deployment. Filter the list so a tenant
+    // only ever sees sources whose names match its prefix and don't trip the
+    // excludeNameSubstrings ban-list.
+    const tenant = getServerTenant()
+    if (Array.isArray(data?.value)) {
+      data.value = data.value.filter((s: any) => isOwnedKnowledgeSource(s?.name, tenant))
+    }
+
     return NextResponse.json(data, {
       headers: {
         'Cache-Control': 'no-cache, no-store, must-revalidate',
@@ -64,6 +74,20 @@ export async function PUT(req: NextRequest) {
 
     const body = await req.json()
     const sourceName = body.name
+
+    // Tenant data isolation: reject creates / updates whose name doesn't
+    // belong to this tenant. Mirrors the knowledge-base create validation.
+    const tenant = getServerTenant()
+    const ownership = validateOwnedName(sourceName, 'knowledgeSource', tenant)
+    if (!ownership.ok) {
+      return NextResponse.json(
+        {
+          error: `Knowledge source name "${sourceName}" is not valid for this tenant.`,
+          hint: ownership.reason,
+        },
+        { status: 400 }
+      )
+    }
 
     // Inject storage connection using MI-based ResourceId format.
     // The Search service's system-assigned MI has 'Storage Blob Data Reader'
