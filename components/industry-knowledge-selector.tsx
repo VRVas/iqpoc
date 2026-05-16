@@ -15,6 +15,7 @@ import { fetchKnowledgeBases } from '@/lib/api'
 import { LoadingSkeleton } from '@/components/shared/loading-skeleton'
 import Image from 'next/image'
 import { cn } from '@/lib/utils'
+import { tenant } from '@/lib/tenant'
 
 interface KnowledgeBase {
   name: string
@@ -88,7 +89,7 @@ export function IndustryKnowledgeSelector() {
           className="text-center space-y-4"
         >
           <div className="inline-flex mb-2">
-            <Image src="/logo_light.png" alt="Qatar Airways" width={48} height={48} className="object-contain" />
+            <Image src={tenant.logoLight} alt={tenant.logoAltText} width={48} height={48} className="object-contain" />
           </div>
           <h1 className="text-4xl font-bold text-fg-default">
             Knowledge Bases

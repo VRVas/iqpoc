@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { getServerTenant, isOwnedKb } from '@/lib/tenant'
 
 const ENDPOINT = process.env.AZURE_SEARCH_ENDPOINT
 const API_KEY = process.env.AZURE_SEARCH_API_KEY
@@ -14,6 +15,22 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
+
+    // Tenant data isolation (Ring 2): refuse to create KBs that don't belong
+    // to this tenant — either the prefix is missing or the name collides with
+    // a sibling tenant's namespace.
+    const tenant = getServerTenant()
+    if (!isOwnedKb(body?.name, tenant)) {
+      return NextResponse.json(
+        {
+          error: `Knowledge base name "${body?.name}" is not valid for this tenant.`,
+          hint: tenant.kbPrefix
+            ? `Names must start with "${tenant.kbPrefix}".`
+            : `Names must not start with a reserved prefix (${(tenant.excludeKbPrefixes ?? []).join(', ')}).`,
+        },
+        { status: 400 }
+      )
+    }
 
     // Inject Azure OpenAI endpoint server-side and use Managed Identity auth.
     // The Search service's system-assigned MI has 'Cognitive Services OpenAI User'

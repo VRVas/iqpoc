@@ -7,6 +7,7 @@ import { ToastProvider } from '@/components/ui/toast'
 import { ViewModeProvider } from '@/lib/view-mode'
 import { GeneralAccessGate } from '@/components/general-access-gate'
 import NextTopLoader from 'nextjs-toploader'
+import { tenant, BUILD_TENANT_ID } from '@/lib/tenant'
 
 const spaceGrotesk = Space_Grotesk({
   subsets: ['latin'],
@@ -22,8 +23,8 @@ const jetBrainsMono = JetBrains_Mono({
 })
 
 export const metadata: Metadata = {
-  title: 'Qatar Airways Contact Center Assistant',
-  description: 'AI co-pilot assisting customer service agents with company knowledge, suggested responses, and relevant documentation powered by Azure AI Search',
+  title: tenant.metadataTitle,
+  description: tenant.metadataDescription,
 }
 
 export default function RootLayout({
@@ -31,10 +32,22 @@ export default function RootLayout({
 }: {
   children: React.ReactNode
 }) {
+  const tenantClass = BUILD_TENANT_ID === 'qatar' ? '' : `tenant-${BUILD_TENANT_ID}`
+  // For tenants that ship a custom non-Next-bundled font (e.g. Zava → Stack Sans Text),
+  // override the CSS var that Tailwind's `font-sans` consumes. The font itself is
+  // imported via @import in app/globals.css so the file is fetched once per page.
+  const sansFontOverride =
+    tenant.fontFamily !== 'Space Grotesk'
+      ? ({ ['--font-sans' as any]: `'${tenant.fontFamily}', system-ui, -apple-system, sans-serif` } as React.CSSProperties)
+      : undefined
+
   return (
-    <html lang="en" suppressHydrationWarning>
-      <body className={`${spaceGrotesk.variable} ${jetBrainsMono.variable}`}>
-        <NextTopLoader color="#5C0632" height={3} showSpinner={false} />
+    <html lang="en" className={tenantClass} suppressHydrationWarning>
+      <body
+        className={`${spaceGrotesk.variable} ${jetBrainsMono.variable}`}
+        style={sansFontOverride}
+      >
+        <NextTopLoader color={tenant.topLoaderColor} height={3} showSpinner={false} />
         <ThemeProvider
           attribute="class"
           defaultTheme="light"

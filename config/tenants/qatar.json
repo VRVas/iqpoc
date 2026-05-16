@@ -1,0 +1,39 @@
+{
+  "$schema": "./tenant.schema.json",
+  "id": "qatar",
+  "displayName": "Qatar Airways",
+  "headerTitle": "Qatar Airways Contact Center Assistant",
+  "metadataTitle": "Qatar Airways Contact Center Assistant",
+  "metadataDescription": "AI co-pilot assisting customer service agents with company knowledge, suggested responses, and relevant documentation powered by Azure AI Search",
+  "footerCaption": "Qatar Airways Contact Center Assistant",
+
+  "logoLight": "/logo_light.png",
+  "logoDark": "/logo-dark.png",
+  "iconPath": "/logo_light.png",
+  "logoAltText": "Qatar Airways logo",
+
+  "fontFamily": "Space Grotesk",
+  "fontGoogleHref": null,
+
+  "kbPrefix": "",
+  "agentPrefix": "",
+  "excludeKbPrefixes": ["zava-"],
+  "excludeAgentPrefixes": ["zava-"],
+
+  "timeZone": "Asia/Qatar",
+  "timeZoneLabel": "Doha time (UTC+3)",
+
+  "defaultWebDomains": ["www.qatarairways.com"],
+  "topLoaderColor": "#5C0632",
+
+  "generalAccessGate": {
+    "enabled": true,
+    "footerCaption": "Qatar Airways Contact Center Assistant"
+  },
+
+  "theme": {
+    "comment": "HSL triplets for CSS vars. See app/globals.css for the canonical Qatar Airways burgundy theme. Qatar uses the default :root block in globals.css, so theme overrides here are not applied.",
+    "lightAccentDefault": "327 52% 26%",
+    "darkAccentDefault": "327 50% 60%"
+  }
+}

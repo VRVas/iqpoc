@@ -22,6 +22,7 @@ import { usePathname, useRouter } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Tooltip } from '@/components/ui/tooltip'
 import Image from 'next/image'
+import { tenant } from '@/lib/tenant'
 
 interface NavItem {
   href: string
@@ -265,11 +266,11 @@ function Header({ onMenuClick, showSidebar }: HeaderProps) {
           )}
 
           <Link href={isAdmin ? '/' : '/test?agent=test'} aria-label="Home" className="flex min-w-0 items-center gap-2.5 rounded-xl px-2 py-1 focus:outline-none focus-visible:ring-2 focus-visible:ring-stroke-focus focus-visible:ring-offset-2 focus-visible:ring-offset-bg-canvas">
-            {/* QR Oryx logo */}
-            <Image src="/logo_light.png" alt="Qatar Airways" width={32} height={32} priority className="shrink-0 object-contain" />
+            {/* Tenant logo */}
+            <Image src={tenant.logoLight} alt={tenant.logoAltText} width={32} height={32} priority className="shrink-0 object-contain" />
             <span className="truncate text-base font-semibold leading-tight tracking-tight max-w-[14rem] sm:max-w-none">
-              <span className="hidden sm:inline">Qatar Airways Contact Center Assistant</span>
-              <span className="sm:hidden">QR Assistant</span>
+              <span className="hidden sm:inline">{tenant.headerTitle}</span>
+              <span className="sm:hidden">{tenant.displayName}</span>
             </span>
           </Link>
         </div>
@@ -358,8 +359,8 @@ function Sidebar({ navigation, currentPath, isOpen, onClose, collapsed, onToggle
             <div className="flex flex-col h-full">
               <div className="flex h-16 items-center justify-between border-b border-glass-border px-4">
                 <Link href="/" aria-label="Home" className="flex min-w-0 items-center gap-1.5 rounded-lg px-2 py-1 focus:outline-none focus-visible:ring-2 focus-visible:ring-stroke-focus focus-visible:ring-offset-2 focus-visible:ring-offset-bg-canvas">
-                  <Image src="/logo_light.png" alt="Qatar Airways" width={24} height={24} className="shrink-0 object-contain" />
-                  <span className="truncate text-sm font-semibold leading-tight">QR Assistant</span>
+                  <Image src={tenant.logoLight} alt={tenant.logoAltText} width={24} height={24} className="shrink-0 object-contain" />
+                  <span className="truncate text-sm font-semibold leading-tight">{tenant.displayName}</span>
                 </Link>
                 <Button
                   variant="ghost"

@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { getServerTenant, isOwnedKb } from '@/lib/tenant'
 
 // Force dynamic rendering - this route always needs fresh data
 export const dynamic = 'force-dynamic'
@@ -51,6 +52,12 @@ export async function GET() {
     }
 
     const data = await response.json()
+
+    // Tenant data isolation (Ring 2): hide KBs that don't belong to this tenant.
+    const tenant = getServerTenant()
+    if (Array.isArray(data?.value)) {
+      data.value = data.value.filter((kb: any) => isOwnedKb(kb?.name, tenant))
+    }
 
     return NextResponse.json(data, {
       headers: {

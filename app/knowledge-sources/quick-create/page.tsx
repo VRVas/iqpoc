@@ -15,6 +15,7 @@ import { createKnowledgeSource } from '@/lib/api'
 import { LoadingSkeleton } from '@/components/shared/loading-skeleton'
 import { useToast } from '@/components/ui/toast'
 import { cn } from '@/lib/utils'
+import { tenant } from '@/lib/tenant'
 
 type SourceType = 'indexedOneLake' | 'searchIndex' | 'azureBlob' | 'remoteSharePoint' | 'indexedSharePoint' | 'web'
 type BlobTab = 'upload' | 'existing'
@@ -60,7 +61,7 @@ const SOURCE_TYPE_INFO = {
     title: 'Web Sources',
     description: 'Crawl and index web pages',
     requiredFields: ['domains'],
-    defaultValues: { domains: ['www.qatarairways.com', 'dohahamadairport.com'] }
+    defaultValues: { domains: tenant.defaultWebDomains }
   }
 }
 
@@ -519,7 +520,7 @@ function QuickCreateKnowledgeSourcePageContent() {
                   <label className="text-sm font-medium text-fg-secondary">Domains <span className="text-red-500">*</span></label>
                   <textarea value={config.domains?.join('\n') || ''}
                     onChange={(e) => setConfig({ ...config, domains: e.target.value.split('\n').filter(Boolean) })}
-                    placeholder="Enter one domain per line (e.g. www.qatarairways.com)"
+                    placeholder={`Enter one domain per line (e.g. ${tenant.defaultWebDomains[0] ?? 'www.example.com'})`}
                     className="mt-1 w-full p-3 border border-stroke-divider rounded-xl text-sm h-32 bg-bg-canvas text-fg-default focus:outline-none focus:ring-2 focus:ring-accent" />
                   <p className="text-xs text-fg-muted mt-1">Domain names only (no https:// prefix).</p>
                 </div>

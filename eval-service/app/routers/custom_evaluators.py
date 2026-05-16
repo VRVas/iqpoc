@@ -14,6 +14,7 @@ Key SDK patterns:
 
 import ast
 import logging
+import os
 from typing import Optional
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
@@ -22,6 +23,13 @@ from app.config import get_project_client, get_settings
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
+
+# Tenant gating: QR-specific evaluators are only exposed when this service runs
+# in the Qatar deployment. Set TENANT_ID=qatar (default) to include them;
+# any other value (e.g. TENANT_ID=zava) hides them from /prebuilt and the
+# register-prebuilt map.
+_TENANT_ID = (os.getenv("TENANT_ID") or "qatar").strip().lower()
+_QR_TENANT = _TENANT_ID == "qatar"
 
 
 # ---------------------------------------------------------------------------
@@ -510,41 +518,46 @@ async def get_prebuilt_custom_evaluators():
     These are domain-specific evaluators designed for the Qatar Airways
     Contact Center use case. They can be registered to the Foundry catalog
     via the /create-code or /create-prompt endpoints.
+
+    Tenant-aware: QR-specific evaluators are hidden when TENANT_ID is not
+    "qatar" so sibling tenants (e.g. Zava) do not see another brand's prompts.
     """
-    return {
-        "evaluators": [
-            {
-                "name": "kb_citation_checker",
-                "display_name": "KB Citation Checker",
-                "type": "code",
-                "description": "Checks if agent response cites knowledge base sources using pattern matching (citations, references, source indicators)",
-                "category": "quality",
-                "input_fields": ["response"],
-                "code_preview": KB_CITATION_CODE[:200] + "...",
-            },
-            {
-                "name": "mcp_tool_accuracy",
-                "display_name": "MCP Tool Accuracy",
-                "type": "code",
-                "description": "Validates MCP tool call parameters and checks if tool results are properly referenced in agent responses",
-                "category": "quality",
-                "input_fields": ["response"],
-                "code_preview": MCP_ACCURACY_CODE[:200] + "...",
-            },
-            {
-                "name": "qr_policy_style",
-                "display_name": "QR Policy Style Compliance",
-                "type": "prompt",
-                "description": "Evaluates responses against Qatar Airways contact center style guidelines: lead with answer, structured format, professional tone, completeness, actionable next steps",
-                "category": "quality",
-                "input_fields": ["query", "response"],
-                "scoring_type": "ordinal",
-                "min_value": 1,
-                "max_value": 5,
-                "prompt_preview": QR_POLICY_STYLE_PROMPT[:200] + "...",
-            },
-        ]
-    }
+    evaluators = [
+        {
+            "name": "kb_citation_checker",
+            "display_name": "KB Citation Checker",
+            "type": "code",
+            "description": "Checks if agent response cites knowledge base sources using pattern matching (citations, references, source indicators)",
+            "category": "quality",
+            "input_fields": ["response"],
+            "code_preview": KB_CITATION_CODE[:200] + "...",
+        },
+        {
+            "name": "mcp_tool_accuracy",
+            "display_name": "MCP Tool Accuracy",
+            "type": "code",
+            "description": "Validates MCP tool call parameters and checks if tool results are properly referenced in agent responses",
+            "category": "quality",
+            "input_fields": ["response"],
+            "code_preview": MCP_ACCURACY_CODE[:200] + "...",
+        },
+    ]
+
+    if _QR_TENANT:
+        evaluators.append({
+            "name": "qr_policy_style",
+            "display_name": "QR Policy Style Compliance",
+            "type": "prompt",
+            "description": "Evaluates responses against Qatar Airways contact center style guidelines: lead with answer, structured format, professional tone, completeness, actionable next steps",
+            "category": "quality",
+            "input_fields": ["query", "response"],
+            "scoring_type": "ordinal",
+            "min_value": 1,
+            "max_value": 5,
+            "prompt_preview": QR_POLICY_STYLE_PROMPT[:200] + "...",
+        })
+
+    return {"evaluators": evaluators}
 
 
 @router.post("/register-prebuilt/{evaluator_name}")
@@ -577,7 +590,10 @@ async def register_prebuilt_evaluator(evaluator_name: str):
             "input_fields": ["response"],
             "pass_threshold": 0.5,
         },
-        "qr_policy_style": {
+    }
+
+    if _QR_TENANT:
+        prebuilt_map["qr_policy_style"] = {
             "type": "prompt",
             "name": "qr_policy_style",
             "display_name": "QR Policy Style Compliance",
@@ -589,8 +605,7 @@ async def register_prebuilt_evaluator(evaluator_name: str):
             "min_value": 1,
             "max_value": 5,
             "threshold": 3,
-        },
-    }
+        }
 
     if evaluator_name not in prebuilt_map:
         raise HTTPException(404, f"Unknown prebuilt evaluator: {evaluator_name}. Available: {list(prebuilt_map.keys())}")

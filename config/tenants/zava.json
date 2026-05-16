@@ -1,0 +1,62 @@
+{
+  "$schema": "./tenant.schema.json",
+  "id": "zava",
+  "displayName": "Zava Aviation",
+  "headerTitle": "Zava Aviation AI Knowledge Management System",
+  "metadataTitle": "Zava Aviation AI Knowledge Management System",
+  "metadataDescription": "AI Knowledge Management System for Zava Aviation — search, retrieve, and reason over Zava operational knowledge with Azure AI Search Knowledge Bases and Azure AI Foundry agents.",
+  "footerCaption": "Zava Aviation AI Knowledge Management System",
+
+  "logoLight": "/logo_zava_light.png",
+  "logoDark": "/logo_zava_dark.png",
+  "iconPath": "/zava_icon.png",
+  "logoAltText": "Zava Aviation logo",
+
+  "fontFamily": "Stack Sans Text",
+  "fontGoogleHref": "https://fonts.googleapis.com/css2?family=Stack+Sans+Text:wght@200..700&display=swap",
+
+  "kbPrefix": "zava-",
+  "agentPrefix": "zava-",
+
+  "timeZone": "America/Los_Angeles",
+  "timeZoneLabel": "Pacific time",
+
+  "defaultWebDomains": ["www.zava-aviation.com"],
+  "topLoaderColor": "#183D4C",
+
+  "generalAccessGate": {
+    "enabled": false,
+    "comment": "Per tenant policy the general access gate is disabled. Admin password is the ADMIN_PASSWORD env var (set to 'admin').",
+    "footerCaption": "Zava Aviation AI Knowledge Management System"
+  },
+
+  "theme": {
+    "comment": "Brand palette: #FFFFFF white, #0A0C0C black, #183D4C Data Sensor Slate (PRIMARY), #9EC9D9 Data Stream Lt. Blue (LIGHT), #0F2A47 Data Mesh Drk. Blue (NAVY, default — override here if the brand sheet specifies a different hex). HSL triplets are consumed by app/globals.css under :root.tenant-zava and .dark.tenant-zava.",
+    "primaryHex": "#183D4C",
+    "lightAccentHex": "#9EC9D9",
+    "navyHex": "#0F2A47",
+    "lightAccentDefault": "197 52% 20%",
+    "lightAccentHover": "197 56% 16%",
+    "lightAccentPressed": "197 60% 12%",
+    "lightAccentSubtle": "197 30% 95%",
+    "lightAccentMuted": "197 30% 70%",
+    "lightAccentGlow": "196 44% 60%",
+    "lightAccentGradientFrom": "197 52% 22%",
+    "lightAccentGradientTo": "211 65% 17%",
+    "lightStrokeFocus": "197 52% 30%",
+    "lightOverlayStrong": "197 30% 35%",
+    "lightGlassBorder": "hsla(197, 30%, 30%, 0.25)",
+
+    "darkAccentDefault": "196 44% 70%",
+    "darkAccentHover": "196 48% 64%",
+    "darkAccentPressed": "196 52% 56%",
+    "darkAccentSubtle": "197 30% 16%",
+    "darkAccentMuted": "197 30% 40%",
+    "darkAccentGlow": "196 50% 60%",
+    "darkAccentGradientFrom": "196 50% 60%",
+    "darkAccentGradientTo": "211 65% 35%",
+    "darkStrokeFocus": "196 50% 65%",
+    "darkOverlayStrong": "196 40% 50%",
+    "darkGlassBorder": "hsla(196, 50%, 60%, 0.30)"
+  }
+}

@@ -428,7 +428,13 @@ export async function sendAgentResponse(data: {
 }): Promise<any> {
   const response = await fetch('/api/foundry/responses', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      // Server uses this to inject local time into the agent's input.
+      'x-tenant-tz': typeof window !== 'undefined'
+        ? (Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC')
+        : 'UTC',
+    },
     body: JSON.stringify(data),
   })
 
@@ -469,7 +475,13 @@ export async function sendAgentResponseStream(
   try {
     const response = await fetch('/api/foundry/responses', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        // Server uses this to inject local time into the agent's input.
+        'x-tenant-tz': typeof window !== 'undefined'
+          ? (Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC')
+          : 'UTC',
+      },
       body: JSON.stringify({ ...data, stream: true }),
     })
 

@@ -15,12 +15,19 @@ export function formatDate(date: Date | string): string {
 }
 
 /**
- * Get current date and time formatted for UTC+3 (Doha/Qatar timezone).
+ * Get current date and time formatted for an arbitrary IANA timezone.
  * Used to inject temporal context into system messages for every conversation.
+ *
+ * On the client, prefer passing the browser-detected timezone via
+ * `Intl.DateTimeFormat().resolvedOptions().timeZone` so the LLM sees the user's
+ * local time (effectively "by IP" since browser TZ is derived from OS locale).
+ *
+ * Pass `undefined` to use the server's local timezone, or pass a fallback
+ * like `tenant.timeZone` when working server-side without a request header.
  */
-export function getQatarDateTime(): string {
+export function getTenantDateTime(timeZone?: string): string {
   return new Intl.DateTimeFormat('en-US', {
-    timeZone: 'Asia/Qatar',
+    timeZone,
     weekday: 'long',
     year: 'numeric',
     month: 'long',
@@ -30,6 +37,26 @@ export function getQatarDateTime(): string {
     second: '2-digit',
     hour12: true,
   }).format(new Date())
+}
+
+/**
+ * Get current date and time formatted for the browser's detected timezone.
+ * Returns `{ value, timeZone, label }` for easy injection into LLM prompts.
+ * Client-side only — server-side code should use `getTenantDateTime(tz)`
+ * with the timezone read from the request header.
+ */
+export function getBrowserDateTime(): { value: string; timeZone: string; label: string } {
+  const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'
+  const value = getTenantDateTime(timeZone)
+  return { value, timeZone, label: timeZone }
+}
+
+/**
+ * @deprecated Use `getTenantDateTime(tenant.timeZone)` or `getBrowserDateTime()` instead.
+ * Retained as a thin wrapper to avoid breaking any call site still on the old name.
+ */
+export function getQatarDateTime(): string {
+  return getTenantDateTime('Asia/Qatar')
 }
 
 export function formatRelativeTime(date: Date | string): string {

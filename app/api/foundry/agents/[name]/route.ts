@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { agentsV2Url, foundryHeaders, ensureMcpConnection, buildMcpTool } from '../../helpers'
+import { getServerTenant, isOwnedAgent } from '@/lib/tenant'
 
 /**
  * GET /api/foundry/agents/[name]
@@ -13,6 +14,11 @@ export async function GET(
 ) {
   try {
     const { name } = params
+
+    if (!isOwnedAgent(name, getServerTenant())) {
+      return NextResponse.json({ error: 'Agent not found' }, { status: 404 })
+    }
+
     const headers = await foundryHeaders()
 
     const response = await fetch(agentsV2Url(`/agents/${encodeURIComponent(name)}`), {
@@ -54,6 +60,11 @@ export async function PATCH(
 ) {
   try {
     const { name } = params
+
+    if (!isOwnedAgent(name, getServerTenant())) {
+      return NextResponse.json({ error: 'Agent not found' }, { status: 404 })
+    }
+
     const body = await request.json()
     const headers = await foundryHeaders()
 
@@ -154,6 +165,11 @@ export async function DELETE(
 ) {
   try {
     const { name } = params
+
+    if (!isOwnedAgent(name, getServerTenant())) {
+      return NextResponse.json({ error: 'Agent not found' }, { status: 404 })
+    }
+
     const headers = await foundryHeaders()
 
     const response = await fetch(agentsV2Url(`/agents/${encodeURIComponent(name)}`), {

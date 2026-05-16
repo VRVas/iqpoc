@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { getServerTenant, isOwnedKb } from '@/lib/tenant'
 
 // Force dynamic rendering
 export const dynamic = 'force-dynamic'
@@ -16,6 +17,11 @@ export async function POST(request: NextRequest, context: RouteContext) {
   try {
     const params = context.params instanceof Promise ? await context.params : context.params
     const knowledgeBaseId = params.id
+
+    if (!isOwnedKb(knowledgeBaseId, getServerTenant())) {
+      return NextResponse.json({ error: 'Knowledge base not found' }, { status: 404 })
+    }
+
     const body = await request.json()
 
     const aclHeader = request.headers.get('x-ms-query-source-authorization') ??

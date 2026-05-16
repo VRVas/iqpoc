@@ -2,6 +2,12 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ─── Stack Sans Text (Zava tenant) ─── */
+/* Loaded only when the `tenant-zava` class is present on <html> via app/layout.tsx;
+   browsers resolve @import unconditionally, but the cost is negligible (~1 css file)
+   and keeping it here means no extra <head> orchestration needed. */
+@import url('https://fonts.googleapis.com/css2?family=Stack+Sans+Text:wght@200..700&display=swap');
+
 /* ─── Jotia font family — restricted to specific characters ─── */
 /* Unicode ranges: A-Z, a-z, 0-3, 5-9 (no 4), colon, semicolon */
 @font-face {
@@ -156,6 +162,47 @@
 
     --shadow-color: 250 10% 5%;
     --shadow-glow: 327 50% 55%;
+  }
+
+  /* ─── Zava Aviation Light Theme ─── */
+  /* Brand: #183D4C Data Sensor Slate (primary), #9EC9D9 Data Stream Lt. Blue,
+     #0F2A47 Data Mesh Drk. Blue. Activated when the build sets
+     NEXT_PUBLIC_TENANT_ID=zava and app/layout.tsx adds `tenant-zava` to <html>. */
+  :root.tenant-zava {
+    --color-accent-default: 197 52% 20%;
+    --color-accent-hover: 197 56% 16%;
+    --color-accent-pressed: 197 60% 12%;
+    --color-accent-subtle: 197 30% 95%;
+    --color-accent-muted: 197 30% 70%;
+    --color-accent-glow: 196 44% 60%;
+    --color-accent-gradient-from: 197 52% 22%;
+    --color-accent-gradient-to: 211 65% 17%;
+
+    --color-stroke-focus: 197 52% 30%;
+    --color-overlay-strong: 197 30% 35%;
+    --color-glass-border: hsla(197, 30%, 30%, 0.25);
+
+    --shadow-color: 197 30% 14%;
+    --shadow-glow: 196 44% 50%;
+  }
+
+  /* ─── Zava Aviation Dark Theme ─── */
+  .dark.tenant-zava {
+    --color-accent-default: 196 44% 70%;
+    --color-accent-hover: 196 48% 64%;
+    --color-accent-pressed: 196 52% 56%;
+    --color-accent-subtle: 197 30% 16%;
+    --color-accent-muted: 197 30% 40%;
+    --color-accent-glow: 196 50% 60%;
+    --color-accent-gradient-from: 196 50% 60%;
+    --color-accent-gradient-to: 211 65% 35%;
+
+    --color-stroke-focus: 196 50% 65%;
+    --color-overlay-strong: 196 40% 50%;
+    --color-glass-border: hsla(196, 50%, 60%, 0.30);
+
+    --shadow-color: 211 40% 5%;
+    --shadow-glow: 196 50% 55%;
   }
 
   * {

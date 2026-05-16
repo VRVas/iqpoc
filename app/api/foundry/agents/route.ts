@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { agentsV2Url, foundryHeaders, ensureMcpConnection, buildMcpTool } from '../helpers'
+import { getServerTenant, isOwnedAgent } from '@/lib/tenant'
 
 /**
  * POST /api/foundry/agents
@@ -18,6 +19,21 @@ export async function POST(request: Request) {
   try {
     const body = await request.json()
     const headers = await foundryHeaders()
+
+    // Tenant data isolation (Ring 2): block creating agents that don't belong
+    // to this tenant's namespace.
+    const tenant = getServerTenant()
+    if (!isOwnedAgent(body?.name, tenant)) {
+      return NextResponse.json(
+        {
+          error: `Agent name "${body?.name}" is not valid for this tenant.`,
+          hint: tenant.agentPrefix
+            ? `Names must start with "${tenant.agentPrefix}".`
+            : `Names must not start with a reserved prefix (${(tenant.excludeAgentPrefixes ?? []).join(', ')}).`,
+        },
+        { status: 400 }
+      )
+    }
 
     // Build tools array
     const tools: Record<string, unknown>[] = []
@@ -129,6 +145,12 @@ export async function GET() {
         { error: data.error?.message || 'Failed to list agents', details: data },
         { status: response.status }
       )
+    }
+
+    // Tenant data isolation (Ring 2): hide agents that don't belong to this tenant.
+    const tenant = getServerTenant()
+    if (Array.isArray(data?.value)) {
+      data.value = data.value.filter((a: any) => isOwnedAgent(a?.name, tenant))
     }
 
     return NextResponse.json(data)

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { getServerTenant, isOwnedKb } from '@/lib/tenant'
 
 // Force dynamic rendering
 export const dynamic = 'force-dynamic'
@@ -16,6 +17,10 @@ export async function GET(_request: NextRequest, context: RouteContext) {
   try {
     const params = context.params instanceof Promise ? await context.params : context.params
     const { id } = params
+
+    if (!isOwnedKb(id, getServerTenant())) {
+      return NextResponse.json({ error: 'Knowledge base not found' }, { status: 404 })
+    }
 
     const response = await fetch(`${ENDPOINT}/knowledgebases/${id}?api-version=${API_VERSION}`, {
       headers: { 'api-key': API_KEY! }
@@ -42,6 +47,11 @@ export async function PUT(request: NextRequest, context: RouteContext) {
   try {
     const params = context.params instanceof Promise ? await context.params : context.params
     const { id } = params
+
+    if (!isOwnedKb(id, getServerTenant())) {
+      return NextResponse.json({ error: 'Knowledge base not found' }, { status: 404 })
+    }
+
     const body = await request.json()
     if (!body.name) {
       body.name = id
@@ -109,6 +119,10 @@ export async function DELETE(_request: NextRequest, context: RouteContext) {
   try {
     const params = context.params instanceof Promise ? await context.params : context.params
     const { id } = params
+
+    if (!isOwnedKb(id, getServerTenant())) {
+      return NextResponse.json({ error: 'Knowledge base not found' }, { status: 404 })
+    }
 
     const response = await fetch(`${ENDPOINT}/knowledgebases/${id}?api-version=${API_VERSION}`, {
       method: 'DELETE',

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { agentsV2Url, foundryHeaders, retrieveFromKb } from '../helpers'
-import { getQatarDateTime } from '@/lib/utils'
+import { getTenantDateTime } from '@/lib/utils'
+import { getServerTenant } from '@/lib/tenant'
 
 /**
  * POST /api/foundry/responses
@@ -36,13 +37,17 @@ export async function POST(request: Request) {
 
     const headers = await foundryHeaders()
 
-    // Inject current UTC+3 (Doha/Qatar) date and time into every request
-    // so the agent always knows the current date/time context.
+    // Inject current local date/time into every request so the agent always knows
+    // the current temporal context. The browser sends its detected timezone via
+    // the `x-tenant-tz` header; we fall back to the tenant's default timezone if
+    // the header is missing (e.g. for non-browser callers).
     // NOTE: The Foundry v2 Responses API does NOT allow `instructions` when
     // `agent` is specified (returns 400: "Not allowed when agent is specified").
     // Instead, prepend the timestamp to the user input so the agent sees it in context.
-    const qatarDateTime = getQatarDateTime()
-    const inputWithDateTime = `[Current date and time (UTC+3, Doha/Qatar): ${qatarDateTime}]\n\n${input}`
+    const tenant = getServerTenant()
+    const tz = request.headers.get('x-tenant-tz') || tenant.timeZone
+    const localDateTime = getTenantDateTime(tz)
+    const inputWithDateTime = `[Current date and time (${tz}): ${localDateTime}]\n\n${input}`
 
     // Initial request payload
     let payload: any = {
