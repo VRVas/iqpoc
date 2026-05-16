@@ -22,7 +22,7 @@
   "timeZoneLabel": "Pacific time",
 
   "defaultWebDomains": ["www.zava-aviation.com"],
-  "topLoaderColor": "#183D4C",
+  "topLoaderColor": "#173873",
 
   "generalAccessGate": {
     "enabled": false,
@@ -60,5 +60,45 @@
     "darkStrokeFocus": "196 50% 65%",
     "darkOverlayStrong": "196 40% 50%",
     "darkGlassBorder": "hsla(196, 50%, 60%, 0.30)"
+  },
+
+  "landing": {
+    "title": "AI Agent Lifecycle Platform",
+    "description": "Enterprise-grade end-to-end management for AI agents — from knowledge curation and agent design through retrieval, evaluation, and continuous monitoring in production.",
+    "tagline": "Built for Zava Aviation on Azure AI Foundry and Azure AI Search — secure, grounded, and observable.",
+    "ctaLabel": "Get Started",
+    "ctaTarget": "/agents",
+    "capabilities": [
+      {
+        "iconId": "agent-build",
+        "title": "Agent Design & Build",
+        "desc": "Compose, configure, and deploy purpose-built AI agents tailored to Zava operations and workflows"
+      },
+      {
+        "iconId": "knowledge",
+        "title": "Knowledge Management",
+        "desc": "Unify Azure Blob, AI Search indexes, SharePoint, OneLake, and the public web into governed knowledge bases"
+      },
+      {
+        "iconId": "retrieval",
+        "title": "Grounded Retrieval",
+        "desc": "Hybrid vector + keyword search with semantic ranking and intent-aware query planning across heterogeneous sources"
+      },
+      {
+        "iconId": "citations",
+        "title": "Cited Responses",
+        "desc": "Every answer is grounded in source documents with verifiable citations users can open and inspect"
+      },
+      {
+        "iconId": "evaluation",
+        "title": "Evaluation & Quality",
+        "desc": "Built-in evaluators, red-team probes, and custom scorers — measure agents before and after every change"
+      },
+      {
+        "iconId": "monitoring",
+        "title": "Continuous Monitoring",
+        "desc": "Track agent performance over time with continuous evaluations, traces, and observability dashboards"
+      }
+    ]
   }
 }

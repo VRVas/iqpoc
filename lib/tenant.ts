@@ -57,6 +57,24 @@ export interface TenantConfig {
   adminPassword: string
 
   theme?: Record<string, string | undefined>
+
+  /**
+   * Optional landing page content. When present, the `/` route's hero is
+   * driven by this block. Icons for capabilities are looked up by `iconId`
+   * inside `components/landing-page.tsx` (so the JSON stays icon-agnostic).
+   */
+  landing?: {
+    title: string
+    description: string
+    tagline?: string
+    ctaLabel?: string
+    ctaTarget?: string
+    capabilities: Array<{
+      iconId: string
+      title: string
+      desc: string
+    }>
+  }
 }
 
 const TENANTS: Record<TenantId, TenantConfig> = {

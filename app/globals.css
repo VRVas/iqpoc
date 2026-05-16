@@ -165,44 +165,45 @@
   }
 
   /* ─── Zava Aviation Light Theme ─── */
-  /* Brand: #183D4C Data Sensor Slate (primary), #9EC9D9 Data Stream Lt. Blue,
-     #0F2A47 Data Mesh Drk. Blue. Activated when the build sets
+  /* Brand: #173873 navy (primary accent, lightness matched to Qatar burgundy
+     for parity), #9EC9D9 Data Stream Lt. Blue (muted/glow), #183D4C Data
+     Sensor Slate (legacy reference). Activated when the build sets
      NEXT_PUBLIC_TENANT_ID=zava and app/layout.tsx adds `tenant-zava` to <html>. */
   :root.tenant-zava {
-    --color-accent-default: 197 52% 20%;
-    --color-accent-hover: 197 56% 16%;
-    --color-accent-pressed: 197 60% 12%;
-    --color-accent-subtle: 197 30% 95%;
-    --color-accent-muted: 197 30% 70%;
-    --color-accent-glow: 196 44% 60%;
-    --color-accent-gradient-from: 197 52% 22%;
-    --color-accent-gradient-to: 211 65% 17%;
+    --color-accent-default: 211 65% 26%;
+    --color-accent-hover: 211 65% 22%;
+    --color-accent-pressed: 211 65% 18%;
+    --color-accent-subtle: 197 50% 95%;
+    --color-accent-muted: 197 49% 73%;
+    --color-accent-glow: 211 65% 38%;
+    --color-accent-gradient-from: 211 65% 28%;
+    --color-accent-gradient-to: 197 60% 24%;
 
-    --color-stroke-focus: 197 52% 30%;
-    --color-overlay-strong: 197 30% 35%;
-    --color-glass-border: hsla(197, 30%, 30%, 0.25);
+    --color-stroke-focus: 211 65% 35%;
+    --color-overlay-strong: 211 40% 45%;
+    --color-glass-border: hsla(211, 50%, 40%, 0.25);
 
-    --shadow-color: 197 30% 14%;
-    --shadow-glow: 196 44% 50%;
+    --shadow-color: 211 40% 14%;
+    --shadow-glow: 211 60% 45%;
   }
 
   /* ─── Zava Aviation Dark Theme ─── */
   .dark.tenant-zava {
-    --color-accent-default: 196 44% 70%;
-    --color-accent-hover: 196 48% 64%;
-    --color-accent-pressed: 196 52% 56%;
-    --color-accent-subtle: 197 30% 16%;
-    --color-accent-muted: 197 30% 40%;
-    --color-accent-glow: 196 50% 60%;
-    --color-accent-gradient-from: 196 50% 60%;
+    --color-accent-default: 197 49% 73%;
+    --color-accent-hover: 197 52% 66%;
+    --color-accent-pressed: 197 56% 58%;
+    --color-accent-subtle: 211 40% 16%;
+    --color-accent-muted: 211 40% 40%;
+    --color-accent-glow: 197 49% 70%;
+    --color-accent-gradient-from: 197 49% 70%;
     --color-accent-gradient-to: 211 65% 35%;
 
-    --color-stroke-focus: 196 50% 65%;
-    --color-overlay-strong: 196 40% 50%;
-    --color-glass-border: hsla(196, 50%, 60%, 0.30);
+    --color-stroke-focus: 197 49% 73%;
+    --color-overlay-strong: 197 40% 60%;
+    --color-glass-border: hsla(197, 49%, 70%, 0.30);
 
     --shadow-color: 211 40% 5%;
-    --shadow-glow: 196 50% 55%;
+    --shadow-glow: 197 49% 60%;
   }
 
   * {

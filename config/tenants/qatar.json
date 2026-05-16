@@ -37,5 +37,30 @@
     "comment": "HSL triplets for CSS vars. See app/globals.css for the canonical Qatar Airways burgundy theme. Qatar uses the default :root block in globals.css, so theme overrides here are not applied.",
     "lightAccentDefault": "327 52% 26%",
     "darkAccentDefault": "327 50% 60%"
+  },
+
+  "landing": {
+    "title": "Contact Center Assistant",
+    "description": "An AI co-pilot assisting customer service agents in real-time with company knowledge, suggested responses, and relevant documentation.",
+    "tagline": "Prioritizes customer resolution and agent efficiency — professional, helpful, and actionable.",
+    "ctaLabel": "Get Started",
+    "ctaTarget": "/agents",
+    "capabilities": [
+      {
+        "iconId": "chat",
+        "title": "Real-Time Guidance",
+        "desc": "AI co-pilot answers agent questions directly and concisely during live interactions"
+      },
+      {
+        "iconId": "search",
+        "title": "Knowledge Retrieval",
+        "desc": "Find relevant documentation and policies from company knowledge bases instantly"
+      },
+      {
+        "iconId": "document",
+        "title": "Cited Responses",
+        "desc": "Every answer references source documents so agents can verify and share with confidence"
+      }
+    ]
   }
 }
