@@ -27,11 +27,11 @@ param projectDescription string = ''
 @description('Tag map applied to the project.')
 param tags object = {}
 
-resource account 'Microsoft.CognitiveServices/accounts@2024-10-01' existing = {
+resource account 'Microsoft.CognitiveServices/accounts@2025-06-01' existing = {
   name: accountName
 }
 
-resource project 'Microsoft.CognitiveServices/accounts/projects@2024-10-01' = {
+resource project 'Microsoft.CognitiveServices/accounts/projects@2025-06-01' = {
   parent: account
   name: projectName
   location: location

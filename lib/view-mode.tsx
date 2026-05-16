@@ -1,10 +1,11 @@
 'use client'
 
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react'
+import { tenant } from '@/lib/tenant'
 
 export type ViewMode = 'agent' | 'admin'
 
-const ADMIN_PASSWORD = 'qrcc2026'
+const ADMIN_PASSWORD = tenant.adminPassword
 
 interface ViewModeContextType {
   viewMode: ViewMode

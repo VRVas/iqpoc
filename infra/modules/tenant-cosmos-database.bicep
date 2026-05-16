@@ -80,13 +80,20 @@ resource responseLogContainer 'Microsoft.DocumentDB/databaseAccounts/sqlDatabase
 // Scope the data-plane role assignment to the database (not the whole account)
 // so the tenant UAMI can only read/write its own database. The role definition
 // itself lives at the account level (built-in role 0000...0002).
+//
+// IMPORTANT: Cosmos data-plane RBAC uses its own URI format for `scope`, NOT
+// the ARM resource id. Database scope is `{accountId}/dbs/{databaseName}`
+// (not `/sqlDatabases/{name}`). Using db.id (ARM format) yields a 400
+// `Expected path segment [dbs] at position [0] but found [sqlDatabases]`.
+var databaseDataPlaneScope = '${cosmos.id}/dbs/${databaseName}'
+
 resource uamiCosmosDataAssignment 'Microsoft.DocumentDB/databaseAccounts/sqlRoleAssignments@2024-11-15' = {
   parent: cosmos
   name: guid(cosmos.id, db.id, userAssignedIdentityResourceId, cosmosBuiltInDataContributorRoleId)
   properties: {
     roleDefinitionId: '${cosmos.id}/sqlRoleDefinitions/${cosmosBuiltInDataContributorRoleId}'
     principalId: reference(userAssignedIdentityResourceId, '2023-01-31', 'Full').properties.principalId
-    scope: db.id
+    scope: databaseDataPlaneScope
   }
 }
 

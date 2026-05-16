@@ -31,6 +31,8 @@
     "footerCaption": "Qatar Airways Contact Center Assistant"
   },
 
+  "adminPassword": "qrcc2026",
+
   "theme": {
     "comment": "HSL triplets for CSS vars. See app/globals.css for the canonical Qatar Airways burgundy theme. Qatar uses the default :root block in globals.css, so theme overrides here are not applied.",
     "lightAccentDefault": "327 52% 26%",

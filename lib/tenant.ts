@@ -53,6 +53,9 @@ export interface TenantConfig {
     footerCaption?: string
   }
 
+  /** Client-side admin-mode unlock password. NOTE: this ships in the bundle and is a UX gate only, not a security boundary. */
+  adminPassword: string
+
   theme?: Record<string, string | undefined>
 }
 

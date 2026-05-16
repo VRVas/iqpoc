@@ -26,9 +26,11 @@
 
   "generalAccessGate": {
     "enabled": false,
-    "comment": "Per tenant policy the general access gate is disabled. Admin password is the ADMIN_PASSWORD env var (set to 'admin').",
+    "comment": "Per tenant policy the general access gate is disabled. Admin password is tenant.adminPassword below.",
     "footerCaption": "Zava Aviation AI Knowledge Management System"
   },
+
+  "adminPassword": "admin",
 
   "theme": {
     "comment": "Brand palette: #FFFFFF white, #0A0C0C black, #183D4C Data Sensor Slate (PRIMARY), #9EC9D9 Data Stream Lt. Blue (LIGHT), #0F2A47 Data Mesh Drk. Blue (NAVY, default — override here if the brand sheet specifies a different hex). HSL triplets are consumed by app/globals.css under :root.tenant-zava and .dark.tenant-zava.",
