@@ -20,11 +20,11 @@
 @description('Azure region for the eval-service stack.')
 param location string
 
-@description('Resource ID of an existing virtual network used by the Container App environment.')
-param vnetResourceId string
-
 @description('Resource ID of the subnet that will host the Cosmos DB private endpoint. Network policies must be disabled on this subnet.')
 param peSubnetResourceId string
+
+@description('Resource ID of the privatelink.documents.azure.com private DNS zone that is already vnet-linked.')
+param cosmosDnsZoneResourceId string
 
 @description('Resource ID of the existing user-assigned managed identity granted Cosmos DB data plane access.')
 param userAssignedIdentityResourceId string
@@ -41,6 +41,9 @@ param containerImage string
 @description('Resource ID of the Azure Container Registry that hosts the image. Used for managed-identity ACR pull RBAC.')
 param acrResourceId string = ''
 
+@description('When true, this module creates an AcrPull role assignment at the current RG scope. Leave false when the ACR lives in another RG/subscription and AcrPull is granted out-of-band on the ACR scope. The iqpoc deployment grants AcrPull directly on the ACR in rg-hiacoo-mcp-private.')
+param manageAcrPullRoleAssignment bool = false
+
 @description('Foundry project endpoint passed as FOUNDRY_PROJECT_ENDPOINT.')
 param foundryProjectEndpoint string
 
@@ -53,6 +56,11 @@ param appInsightsConnectionString string = ''
 
 @description('Cosmos DB account name (3-44 lowercase chars + digits + dashes).')
 param cosmosAccountName string = 'cosmos-eval-iqpoc'
+
+@description('Private endpoint name for the Cosmos account. Leave empty to auto-derive pe-<cosmosAccountName>.')
+param cosmosPrivateEndpointName string = ''
+
+var effectiveCosmosPrivateEndpointName = empty(cosmosPrivateEndpointName) ? 'pe-${cosmosAccountName}' : cosmosPrivateEndpointName
 
 @description('Cosmos database name.')
 param cosmosDatabaseName string = 'eval-db'
@@ -153,7 +161,7 @@ resource responseLogContainer 'Microsoft.DocumentDB/databaseAccounts/sqlDatabase
 // Private endpoint for Cosmos (subresource = "Sql"), private DNS, VNet link
 // ---------------------------------------------------------------------------
 resource cosmosPrivateEndpoint 'Microsoft.Network/privateEndpoints@2024-05-01' = {
-  name: 'pe-${cosmosAccountName}'
+  name: effectiveCosmosPrivateEndpointName
   location: location
   properties: {
     subnet: {
@@ -171,32 +179,17 @@ resource cosmosPrivateEndpoint 'Microsoft.Network/privateEndpoints@2024-05-01' =
   }
 }
 
-resource cosmosPrivateDnsZone 'Microsoft.Network/privateDnsZones@2024-06-01' = {
-  name: 'privatelink.documents.azure.com'
-  location: 'global'
-}
-
-resource cosmosDnsVnetLink 'Microsoft.Network/privateDnsZones/virtualNetworkLinks@2024-06-01' = {
-  parent: cosmosPrivateDnsZone
-  name: '${last(split(vnetResourceId, '/'))}-cosmos-link'
-  location: 'global'
-  properties: {
-    virtualNetwork: {
-      id: vnetResourceId
-    }
-    registrationEnabled: false
-  }
-}
-
 resource cosmosPeDnsZoneGroup 'Microsoft.Network/privateEndpoints/privateDnsZoneGroups@2024-05-01' = {
   parent: cosmosPrivateEndpoint
-  name: 'default'
+  // Live resource was provisioned as `cosmos-zone-group` with inner config `documents`.
+  // Keep these names so what-if/deploy match the existing state without recreating the group.
+  name: 'cosmos-zone-group'
   properties: {
     privateDnsZoneConfigs: [
       {
-        name: 'privatelink-documents-azure-com'
+        name: 'documents'
         properties: {
-          privateDnsZoneId: cosmosPrivateDnsZone.id
+          privateDnsZoneId: cosmosDnsZoneResourceId
         }
       }
     ]
@@ -221,7 +214,7 @@ resource uamiCosmosDataAssignment 'Microsoft.DocumentDB/databaseAccounts/sqlRole
 // ---------------------------------------------------------------------------
 // AcrPull role for the UAMI on the registry (only if acrResourceId provided)
 // ---------------------------------------------------------------------------
-resource acrPullAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!empty(acrResourceId)) {
+resource acrPullAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (manageAcrPullRoleAssignment && !empty(acrResourceId)) {
   name: guid(acrResourceId, userAssignedIdentityResourceId, acrPullRoleId)
   scope: resourceGroup()
   properties: {

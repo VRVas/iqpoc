@@ -14,8 +14,8 @@ using './modules/eval-service.bicep'
 
 param location = 'eastus2'
 
-param vnetResourceId = '/subscriptions/e7f1696a-37dd-4876-accb-2facb8713917/resourceGroups/iqpoc/providers/Microsoft.Network/virtualNetworks/vnet-iqpoc'
 param peSubnetResourceId = '/subscriptions/e7f1696a-37dd-4876-accb-2facb8713917/resourceGroups/iqpoc/providers/Microsoft.Network/virtualNetworks/vnet-iqpoc/subnets/subnet-pe'
+param cosmosDnsZoneResourceId = '/subscriptions/e7f1696a-37dd-4876-accb-2facb8713917/resourceGroups/iqpoc/providers/Microsoft.Network/privateDnsZones/privatelink.documents.azure.com'
 
 param userAssignedIdentityResourceId = '/subscriptions/e7f1696a-37dd-4876-accb-2facb8713917/resourceGroups/iqpoc/providers/Microsoft.ManagedIdentity/userAssignedIdentities/id-eval-service'
 param userAssignedIdentityClientId = '2cf9ca2a-8c77-448e-9e86-c53c3273900f'

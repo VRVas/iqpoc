@@ -21,6 +21,20 @@ param tags object = {}
 @description('Container name for sample data')
 param sampleDataContainerName string = 'sample-documents'
 
+@description('Public network access. Disable when access is exclusively via private endpoint.')
+@allowed([
+  'Enabled'
+  'Disabled'
+])
+param publicNetworkAccess string = 'Enabled'
+
+@description('Network ACL default action when public access is enabled. Set to Deny + add ipRules/vnetRules to lock down without a PE.')
+@allowed([
+  'Allow'
+  'Deny'
+])
+param networkAclDefaultAction string = 'Allow'
+
 resource storageAccount 'Microsoft.Storage/storageAccounts@2023-01-01' = {
   name: storageAccountName
   location: location
@@ -33,9 +47,15 @@ resource storageAccount 'Microsoft.Storage/storageAccounts@2023-01-01' = {
     accessTier: 'Hot'
     allowBlobPublicAccess: false
     allowSharedKeyAccess: true
-    publicNetworkAccess: 'Enabled'
+    publicNetworkAccess: publicNetworkAccess
     minimumTlsVersion: 'TLS1_2'
     supportsHttpsTrafficOnly: true
+    networkAcls: {
+      bypass: 'AzureServices'
+      defaultAction: networkAclDefaultAction
+      ipRules: []
+      virtualNetworkRules: []
+    }
     encryption: {
       services: {
         blob: {
