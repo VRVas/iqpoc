@@ -169,8 +169,11 @@
      (PRIMARY accent), #9EC9D9 Data Mesh Drk. Blue (LIGHT accent). Activated
      when the build sets NEXT_PUBLIC_TENANT_ID=zava and app/layout.tsx adds
      `tenant-zava` to <html>. Surfaces are also overridden so the page reads
-     as pure white instead of inheriting Qatar's warm-grey canvas. */
-  :root.tenant-zava {
+     as pure white instead of inheriting Qatar's warm-grey canvas.
+     NOTE: We use `html.tenant-zava` instead of `:root.tenant-zava` because
+     Tailwind/PostCSS silently drops the `:root.tenant-zava` block during
+     compilation (the `.dark.tenant-zava` sibling block is preserved). */
+  html.tenant-zava {
     /* Surfaces — pure white per brand spec */
     --color-bg-canvas: 0 0% 100%;
     --color-bg-subtle: 197 20% 97%;

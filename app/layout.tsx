@@ -33,20 +33,10 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   const tenantClass = BUILD_TENANT_ID === 'qatar' ? '' : `tenant-${BUILD_TENANT_ID}`
-  // For tenants that ship a custom non-Next-bundled font (e.g. Zava → Stack Sans Text),
-  // override the CSS var that Tailwind's `font-sans` consumes. The font itself is
-  // imported via @import in app/globals.css so the file is fetched once per page.
-  const sansFontOverride =
-    tenant.fontFamily !== 'Space Grotesk'
-      ? ({ ['--font-sans' as any]: `'${tenant.fontFamily}', system-ui, -apple-system, sans-serif` } as React.CSSProperties)
-      : undefined
 
   return (
     <html lang="en" className={tenantClass} suppressHydrationWarning>
-      <body
-        className={`${spaceGrotesk.variable} ${jetBrainsMono.variable}`}
-        style={sansFontOverride}
-      >
+      <body className={`${spaceGrotesk.variable} ${jetBrainsMono.variable}`}>
         <NextTopLoader color={tenant.topLoaderColor} height={3} showSpinner={false} />
         <ThemeProvider
           attribute="class"
