@@ -1,5 +1,16 @@
 const tokens = require('./tokens.json')
 
+// Tenant-aware font stack. The Qatar build keeps the Jotia OTF family at the
+// front of the stack (browsers use Jotia for its restricted unicode range and
+// fall through to the rest for the remaining characters). The Zava build —
+// and any non-qatar tenant — removes Jotia entirely so the brand font (Stack
+// Sans Text, loaded via @import in app/globals.css) is the primary face.
+const NEXT_PUBLIC_TENANT_ID = (process.env.NEXT_PUBLIC_TENANT_ID || 'qatar').trim().toLowerCase()
+const sansFamily =
+  NEXT_PUBLIC_TENANT_ID === 'qatar'
+    ? tokens.font.family.system
+    : tokens.font.family.system.filter((f) => f !== 'Jotia')
+
 /** @type {import('tailwindcss').Config} */
 module.exports = {
   content: [
@@ -91,7 +102,7 @@ module.exports = {
         '4xl': [tokens.type['4xl'].size, { lineHeight: tokens.type['4xl'].lineHeight, letterSpacing: tokens.type['4xl'].letterSpacing }],
       },
       fontFamily: {
-        sans: tokens.font.family.system,
+        sans: sansFamily,
         mono: tokens.font.family.mono,
       },
       fontWeight: {

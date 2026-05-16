@@ -1,11 +1,17 @@
 """List available evaluators."""
 
 import logging
+import os
 from fastapi import APIRouter
 from app.services.eval_service import EVALUATOR_REGISTRY
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
+
+# Tenant gating mirrors custom_evaluators.py: the QR-specific fallback entry
+# (`custom.qr_policy_style`) is only exposed in the Qatar Airways deployment.
+_TENANT_ID = (os.getenv("TENANT_ID") or "qatar").strip().lower()
+_QR_TENANT = _TENANT_ID == "qatar"
 
 # Descriptions and caveats for each evaluator, grounded in MS Learn docs
 EVALUATOR_META = {
@@ -78,7 +84,8 @@ async def list_evaluators():
         custom = [
             {"name": "custom.kb_citation", "short_name": "kb_citation", "category": "domain", "description": "Checks if agent cites KB sources in responses", "caveat": None},
             {"name": "custom.mcp_accuracy", "short_name": "mcp_accuracy", "category": "domain", "description": "Validates MCP tool call parameters and result interpretation", "caveat": None},
-            {"name": "custom.qr_policy_style", "short_name": "qr_policy_style", "category": "domain", "description": "Checks QR contact center style guidelines (lead with answer, cite sources, bullet points)", "caveat": None},
         ]
+        if _QR_TENANT:
+            custom.append({"name": "custom.qr_policy_style", "short_name": "qr_policy_style", "category": "domain", "description": "Checks QR contact center style guidelines (lead with answer, cite sources, bullet points)", "caveat": None})
 
     return {"built_in": built_in, "custom": custom}

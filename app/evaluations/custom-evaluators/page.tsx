@@ -14,6 +14,11 @@ import {
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { PageHeader } from '@/components/shared/page-header'
+import { tenant } from '@/lib/tenant'
+
+const PREBUILT_CAPTION =
+  tenant.evaluationDefaults?.prebuiltDomainCaption ??
+  `Ready-to-use evaluators designed for the ${tenant.displayName} knowledge platform. Click "Register" to add them to your Foundry evaluator catalog.`
 
 /**
  * Custom Evaluators Management Page
@@ -27,10 +32,12 @@ import { PageHeader } from '@/components/shared/page-header'
  * 2. Prompt-based: LLM judge prompt with ordinal/continuous/binary scoring
  *    Ref: https://learn.microsoft.com/en-us/azure/foundry/concepts/evaluation-evaluators/custom-evaluators#prompt-based-evaluators
  *
- * Also provides pre-built domain-specific evaluators for Qatar Airways Contact Center:
- * - kb_citation_checker: Checks if response cites KB sources
- * - mcp_tool_accuracy: Validates MCP tool call parameters
- * - qr_policy_style: QR contact center style compliance
+ * Also provides pre-built domain-specific evaluators per tenant (see
+ * config/tenants/<id>.json → evaluationDefaults.prebuiltDomainCaption). The
+ * pre-built list itself is filtered server-side by TENANT_ID inside
+ * eval-service/app/routers/custom_evaluators.py so brand-specific evaluators
+ * (e.g. the Qatar Airways `qr_policy_style` LLM judge) never leak into a
+ * sibling tenant's deployment.
  */
 
 interface CatalogEvaluator {
@@ -229,7 +236,7 @@ export default function CustomEvaluatorsPage() {
       <div className="rounded-2xl border border-stroke-divider bg-bg-card p-6">
         <h3 className="text-sm font-semibold text-fg-default mb-4">Pre-built Domain Evaluators</h3>
         <p className="text-xs text-fg-muted mb-4">
-          Ready-to-use evaluators designed for the Qatar Airways Contact Center. Click &ldquo;Register&rdquo; to add them to your Foundry evaluator catalog.
+          {PREBUILT_CAPTION}
         </p>
 
         {prebuiltLoading ? (

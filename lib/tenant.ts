@@ -94,6 +94,23 @@ export interface TenantConfig {
       desc: string
     }>
   }
+
+  /**
+   * Optional default copy for the evaluation playground (`/evaluations/run`)
+   * and the custom evaluators page (`/evaluations/custom-evaluators`). Lets
+   * each tenant ship domain-appropriate seed queries / synthetic prompts /
+   * dataset rows without leaking another brand's vocabulary.
+   */
+  evaluationDefaults?: {
+    /** Subtitle on the Pre-built Domain Evaluators card. */
+    prebuiltDomainCaption?: string
+    /** Newline-delimited seed queries for the agent-target eval form. */
+    queries?: string
+    /** Synthetic-data eval generation prompt. */
+    syntheticPrompt?: string
+    /** Two JSONL rows used as the default dataset textarea contents. */
+    datasetRows?: string
+  }
 }
 
 const TENANTS: Record<TenantId, TenantConfig> = {

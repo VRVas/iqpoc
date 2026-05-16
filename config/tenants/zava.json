@@ -24,7 +24,7 @@
   "timeZoneLabel": "Pacific time",
 
   "defaultWebDomains": ["www.zava-aviation.com"],
-  "topLoaderColor": "#173873",
+  "topLoaderColor": "#183D4C",
 
   "generalAccessGate": {
     "enabled": false,
@@ -102,5 +102,12 @@
         "desc": "Track agent performance over time with continuous evaluations, traces, and observability dashboards"
       }
     ]
+  },
+
+  "evaluationDefaults": {
+    "prebuiltDomainCaption": "Ready-to-use evaluators for the Zava Aviation knowledge platform. Click \"Register\" to add them to your Foundry evaluator catalog.",
+    "queries": "maintenance schedule for fleet renewal\nflight crew rest requirements long haul\ncargo loading limits 777 freighter\nfuel uplift planning for transatlantic route\ngo-around procedure crosswind landing\nde-icing minimum temperature threshold\nrunway incursion reporting workflow\nticket change fees premium economy\nbaggage policy fleet-wide standard\nlounge access entitlement loyalty silver\nground handling turnaround time wide-body\nMEL deferred item resolution timeline\nweight and balance calculation cargo combi\nemergency oxygen mask deployment altitude\nairworthiness directive compliance tracking\nflight plan filing oceanic crossing\nELT activation false alarm procedure\nweather minima for night VFR operations\ncrew scheduling pairing optimization\ndelay code assignment ATC restriction",
+    "syntheticPrompt": "You are simulating an operations and knowledge-base assistant for Zava Aviation. Generate realistic queries an operations specialist, dispatcher, or crew scheduler would type. Keep them short, informal, sometimes grammatically imperfect, using common aviation abbreviations. Mix difficulty levels:\n\nEASY (single-topic lookups): maintenance intervals, fuel policy basics, weather minima, baggage standards, runway lengths, MEL items\nMEDIUM (policy interpretation): crew rest waivers, deferred maintenance impact, ETOPS planning, cargo loading limits, irregular operations recovery\nHARD (multi-topic combos): 'crew rest + diversion alternate fuel for transatlantic', 'MEL deferred item + ETOPS qualification', 'cargo + weight & balance for combi configuration', 'weather minima + airport curfew + crew duty limit'\n\nInclude queries about: aircraft maintenance, flight operations, crew scheduling, dispatch, fuel planning, weight & balance, weather, ATC procedures, irregular operations, safety reporting, and ground handling. Write them as a working operator would — not full sentences.",
+    "datasetRows": "{\"query\": \"What is the standard turnaround time for a 737 NG narrow-body?\", \"response\": \"Standard turnaround time for a 737 NG narrow-body is approximately 35-45 minutes for a quick turn with no maintenance findings.\", \"context\": \"Ground operations manual: 737 NG turnaround target 40 min nominal, 35 min minimum quick turn.\", \"ground_truth\": \"35-45 minutes for a 737 NG quick turnaround.\"}\n{\"query\": \"How long must a long-haul crew rest after a 12-hour duty?\", \"response\": \"Crew must receive a minimum of 12 hours rest after a 12-hour duty period, extended to 14 hours if the duty crossed multiple time zones.\", \"context\": \"Crew rest rules: 12h minimum after 10-12h duty, 14h after time-zone crossing duties.\", \"ground_truth\": \"At least 12 hours of rest, 14 hours if the duty crossed time zones.\"}"
   }
 }

@@ -13,6 +13,21 @@ import {
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { PageHeader } from '@/components/shared/page-header'
+import { tenant } from '@/lib/tenant'
+
+// Tenant-aware defaults for the evaluation seed inputs. Each tenant ships its
+// own domain-appropriate copy via config/tenants/<id>.json → evaluationDefaults
+// so Zava never sees Qatar Airways query vocabulary and vice versa.
+const EVAL_DEFAULTS = tenant.evaluationDefaults ?? {}
+const DEFAULT_QUERIES =
+  EVAL_DEFAULTS.queries ??
+  'refund policy economy ticket\nbaggage allowance business class\npet transport cage sizes dogs'
+const DEFAULT_SYNTHETIC_PROMPT =
+  EVAL_DEFAULTS.syntheticPrompt ??
+  `You are simulating a ${tenant.displayName} contact center. Generate realistic customer queries as an operator would type them — short, informal, sometimes grammatically imperfect, using abbreviations.`
+const DEFAULT_DATASET_ROWS =
+  EVAL_DEFAULTS.datasetRows ??
+  '{"query": "Example question?", "response": "Example response.", "context": "Example context.", "ground_truth": "Expected answer."}'
 
 /**
  * Run Evaluation Page — supports all 4 evaluation modes per MS Learn:
@@ -54,8 +69,8 @@ export default function RunEvaluationPage() {
   const [agentToolTypes, setAgentToolTypes] = useState<Set<string>>(new Set())
   const [agentToolsLoading, setAgentToolsLoading] = useState(false)
   const [agentToolDefinitions, setAgentToolDefinitions] = useState<any[]>([])
-  const [queries, setQueries] = useState("refund policy economy ticket\nbaggage allowance business class\npet transport cage sizes dogs\ncan i change my flight to tomorrow\nwhat happens if i miss my connecting flight\nupgrade from economy to business how much\ncheck in online not working\nqmice portal terminated can it be reactivated\nlost luggage compensation process\ndo you fly doha to boston direct\nis QR320 delayed today\nwheelchair assistance how to request\nunaccompanied minor policy age limit\nfrequent flyer miles expire?\nbaggage + pet in cabin same flight possible?\nrefund for cancelled flight AND rebooking options\nlounge access with economy ticket privilege club gold\ninfant bassinet availability long haul\nvisa transit doha do i need one\nboarding gate info doha to london today")
-  const [syntheticPrompt, setSyntheticPrompt] = useState("You are simulating a Qatar Airways contact center. Generate realistic customer queries as a contact center operator would type them — short, informal, sometimes grammatically imperfect, using abbreviations. Mix difficulty levels:\n\nEASY (single-topic lookups): baggage limits, check-in times, meal options, seat selection, flight status\nMEDIUM (policy interpretation): refund eligibility, rebooking rules, upgrade costs, loyalty tier benefits, pet transport requirements, unaccompanied minors\nHARD (multi-topic combos): 'refund + rebooking options for cancelled flight', 'pet in cabin AND extra baggage same booking', 'transit visa doha + lounge access with economy ticket', 'upgrade cost business + extra legroom availability'\n\nInclude queries about: baggage, refunds, flight changes, loyalty/Privilege Club, check-in, pet transport, special assistance, MCP airport operations (delays, gates, runway usage), QMICE portal, visa/transit, infant/child policies. Write them as an operator would — not full sentences.")
+  const [queries, setQueries] = useState(DEFAULT_QUERIES)
+  const [syntheticPrompt, setSyntheticPrompt] = useState(DEFAULT_SYNTHETIC_PROMPT)
   const [syntheticCount, setSyntheticCount] = useState(10)
 
   // Response IDs state
@@ -64,10 +79,7 @@ export default function RunEvaluationPage() {
   const [selectedResponseIds, setSelectedResponseIds] = useState<Set<string>>(new Set())
 
   // Dataset state
-  const [datasetRows, setDatasetRows] = useState<string>(
-    '{"query": "What is the baggage allowance?", "response": "Economy class passengers are allowed 30kg checked baggage and 7kg hand luggage.", "context": "Baggage policy document: Economy class - 30kg checked, 7kg hand luggage.", "ground_truth": "Economy class passengers can carry 30kg checked and 7kg hand luggage."}\n' +
-    '{"query": "How do I request a wheelchair?", "response": "You can request wheelchair assistance through Manage Booking or by calling our contact center 48 hours before departure.", "context": "Special assistance: Wheelchair service available. Request 48h before flight via Manage Booking or contact center.", "ground_truth": "Request wheelchair assistance 48 hours before departure through Manage Booking or contact center."}'
-  )
+  const [datasetRows, setDatasetRows] = useState<string>(DEFAULT_DATASET_ROWS)
 
   // Run state
   const [running, setRunning] = useState(false)
