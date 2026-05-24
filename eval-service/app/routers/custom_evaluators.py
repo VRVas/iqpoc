@@ -546,9 +546,9 @@ async def get_prebuilt_custom_evaluators():
     if _QR_TENANT:
         evaluators.append({
             "name": "qr_policy_style",
-            "display_name": "QR Policy Style Compliance",
+            "display_name": "Policy Style Compliance",
             "type": "prompt",
-            "description": "Evaluates responses against Qatar Airways contact center style guidelines: lead with answer, structured format, professional tone, completeness, actionable next steps",
+            "description": "Evaluates responses against contact center style guidelines: lead with answer, structured format, professional tone, completeness, actionable next steps",
             "category": "quality",
             "input_fields": ["query", "response"],
             "scoring_type": "ordinal",
