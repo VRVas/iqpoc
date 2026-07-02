@@ -269,9 +269,7 @@ export async function createKnowledgeSource(sourceData: any): Promise<any> {
 
   if (!response.ok) {
     const errorData = await response.json()
-    // Prefer the tenant-isolation `hint` (e.g. '"zava" is not permitted in the name.')
-    // when the API surfaces one, so the toast carries the actionable message.
-    throw new Error(errorData.hint || errorData.error || 'Failed to create knowledge source')
+    throw new Error(errorData.error || 'Failed to create knowledge source')
   }
 
   return response.json()
@@ -430,13 +428,7 @@ export async function sendAgentResponse(data: {
 }): Promise<any> {
   const response = await fetch('/api/foundry/responses', {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      // Server uses this to inject local time into the agent's input.
-      'x-tenant-tz': typeof window !== 'undefined'
-        ? (Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC')
-        : 'UTC',
-    },
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data),
   })
 
@@ -477,13 +469,7 @@ export async function sendAgentResponseStream(
   try {
     const response = await fetch('/api/foundry/responses', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        // Server uses this to inject local time into the agent's input.
-        'x-tenant-tz': typeof window !== 'undefined'
-          ? (Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC')
-          : 'UTC',
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ ...data, stream: true }),
     })
 

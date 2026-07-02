@@ -59,121 +59,167 @@ interface EvalRun {
 export default function ResultsIndexPage() {
   const router = useRouter()
   const [tab, setTab] = useState<Tab>('evaluations')
-  const [runs, setRuns] = useState<EvalRun[]>([])
-  const [total, setTotal] = useState(0)
-  const [evalCount, setEvalCount] = useState(0)
-  const [redTeamCount, setRedTeamCount] = useState(0)
+  const [allRuns, setAllRuns] = useState<EvalRun[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
   const [evalId, setEvalId] = useState('')
   const [runId, setRunId] = useState('')
 
-  // Sorting, pagination, and date filter — all driven server-side now
-  const [sortBy, setSortBy] = useState<SortBy>('latest')
+  // Sorting, pagination, and date filter
+  const [sortBy, setSortBy] = useState<SortBy>('volume')
   const [page, setPage] = useState(1)
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
   const PAGE_SIZE = 10
 
   // ---------------------------------------------------------------------------
-  // Backfill seeds — historical red team runs that pre-date Cosmos persistence.
-  // These are POSTed once on mount to /api/eval/red-team/register so the
-  // backend has them in Cosmos. After backfill the seeds are a no-op.
+  // Red team run persistence via localStorage
+  // Foundry's evals.list() doesn't return red team evals (separate namespace).
+  // We store known red team run IDs in localStorage and fetch their status
+  // directly from the Foundry API on each load.
   // ---------------------------------------------------------------------------
-  const SEED_RED_TEAM_RUNS: Array<{eval_id: string; run_id: string; name: string}> = [
-    {
-      eval_id: 'eval_2b986ef7d2ab42c28b1901650f253cec',
-      run_id: 'evalrun_431e6d9084854b899c3ea439d085297c',
-      name: 'Red Team - agent-1774946608254 - 2026-04-08T17:46',
-    },
-    {
-      eval_id: 'eval_399d9a968902457bb94772327370754a',
-      run_id: 'evalrun_30ae05c7ddab400dadf9458dec5a96ae',
-      name: 'Red Team - cc-general-operator - 2026-04-25',
-    },
-  ]
+  const RT_STORAGE_KEY = 'foundry-iq-red-team-runs'
+  const RT_BLOB_KEY = 'red-team-runs'
 
-  async function seedRedTeamRuns() {
-    await Promise.all(SEED_RED_TEAM_RUNS.map(async r => {
-      try {
-        const qs = new URLSearchParams({
-          eval_id: r.eval_id,
-          run_id: r.run_id,
-          name: r.name,
-          agent_name: '',
-        }).toString()
-        await fetch(`/api/eval/red-team/register?${qs}`, { method: 'POST' })
-      } catch { /* best effort */ }
-    }))
+  function getStoredRedTeamRuns(): Array<{eval_id: string; run_id: string; name: string}> {
+    try {
+      return JSON.parse(localStorage.getItem(RT_STORAGE_KEY) || '[]')
+    } catch { return [] }
   }
 
-  function buildQuery(type: 'evaluation' | 'red_team', sample: boolean): string {
-    const params = new URLSearchParams({ action: 'recent-runs', type })
-    if (sample) {
-      params.set('limit', '1')
-      params.set('offset', '0')
-      return params.toString()
+  function storeRedTeamRunLocal(evalId: string, runId: string, name: string) {
+    const existing = getStoredRedTeamRuns()
+    if (!existing.some(r => r.run_id === runId)) {
+      existing.push({ eval_id: evalId, run_id: runId, name })
+      localStorage.setItem(RT_STORAGE_KEY, JSON.stringify(existing))
     }
-    params.set('limit', String(PAGE_SIZE))
-    params.set('offset', String((page - 1) * PAGE_SIZE))
-    params.set('order', 'desc')
-    params.set('order_by', sortBy === 'volume' ? 'resultCounts.total' : 'createdAt')
-    if (dateFrom) {
-      const fromTs = Math.floor(new Date(dateFrom + 'T00:00:00').getTime() / 1000)
-      params.set('date_from', String(fromTs))
-    }
-    if (dateTo) {
-      const toTs = Math.floor(new Date(dateTo + 'T23:59:59').getTime() / 1000)
-      params.set('date_to', String(toTs))
-    }
-    return params.toString()
+  }
+
+  // Sync red team runs to/from blob storage (durable persistence)
+  async function syncRedTeamRunsFromBlob() {
+    try {
+      const resp = await fetch(`/api/eval/insights/${RT_BLOB_KEY}`)
+      if (!resp.ok) return
+      const data = await resp.json()
+      const blobRuns: Array<{eval_id: string; run_id: string; name: string}> = data.runs || []
+      // Merge blob runs into localStorage (blob is source of truth)
+      for (const run of blobRuns) {
+        storeRedTeamRunLocal(run.eval_id, run.run_id, run.name)
+      }
+    } catch { /* blob not available */ }
+  }
+
+  async function saveRedTeamRunToBlob(evalId: string, runId: string, name: string) {
+    storeRedTeamRunLocal(evalId, runId, name)
+    try {
+      const allRuns = getStoredRedTeamRuns()
+      await fetch(`/api/eval/insights/${RT_BLOB_KEY}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ runs: allRuns }),
+      })
+    } catch { /* best effort */ }
   }
 
   const fetchHistory = () => {
     setLoading(true)
     setError('')
 
-    const activeType = tab === 'red-team' ? 'red_team' : 'evaluation'
-    const pageFetch = fetch(`/api/eval/history?${buildQuery(activeType, false)}`)
+    // Fetch eval runs from history API
+    const evalPromise = fetch('/api/eval/history?action=recent-runs&limit=500')
       .then(r => r.json())
-      .catch(() => ({ runs: [], total: 0 }))
-    // Tab counter queries — small payload, just need `total`
-    const evalCountFetch = fetch(`/api/eval/history?${buildQuery('evaluation', true)}`)
-      .then(r => r.json())
-      .catch(() => ({ total: 0 }))
-    const rtCountFetch = fetch(`/api/eval/history?${buildQuery('red_team', true)}`)
-      .then(r => r.json())
-      .catch(() => ({ total: 0 }))
+      .catch(() => ({ runs: [] }))
 
-    Promise.all([pageFetch, evalCountFetch, rtCountFetch])
-      .then(([pageData, evalData, rtData]) => {
-        if (pageData.error) throw new Error(pageData.error)
-        setRuns(pageData.runs || [])
-        setTotal(pageData.total ?? (pageData.runs?.length || 0))
-        setEvalCount(evalData.total ?? 0)
-        setRedTeamCount(rtData.total ?? 0)
+    // Fetch red team run status for each stored run ID
+    const storedRtRuns = getStoredRedTeamRuns()
+    const rtPromises = storedRtRuns.map(rt =>
+      fetch(`/api/eval/status/${rt.run_id}?eval_id=${rt.eval_id}`)
+        .then(r => r.json())
+        .then(data => ({
+          id: rt.run_id,
+          eval_id: rt.eval_id,
+          eval_name: rt.name,
+          type: 'red_team' as const,
+          name: rt.name,
+          status: data.status || 'unknown',
+          created_at: undefined as number | undefined,
+          report_url: data.report_url,
+          result_counts: data.result_counts,
+        }))
+        .catch(() => null)
+    )
+
+    Promise.all([evalPromise, ...rtPromises])
+      .then(([evalData, ...rtResults]) => {
+        if (evalData.error) throw new Error(evalData.error)
+        const evalRuns = (evalData.runs || []).map((r: any) => ({ ...r, type: r.type || 'evaluation' }))
+        const rtRuns = (rtResults.filter(Boolean) as EvalRun[])
+        setAllRuns([...evalRuns, ...rtRuns].sort((a, b) => (b.created_at || 0) - (a.created_at || 0)))
       })
       .catch(err => setError(err.message))
       .finally(() => setLoading(false))
   }
 
-  // Backfill seeds once, then load the page
+  // Seed the existing red team run on first mount + sync from blob
   useEffect(() => {
-    seedRedTeamRuns().then(() => fetchHistory())
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // Register the known red team runs so they persist across refreshes
+    storeRedTeamRunLocal(
+      'eval_2b986ef7d2ab42c28b1901650f253cec',
+      'evalrun_431e6d9084854b899c3ea439d085297c',
+      'Red Team - agent-1774946608254 - 2026-04-08T17:46'
+    )
+    storeRedTeamRunLocal(
+      'eval_399d9a968902457bb94772327370754a',
+      'evalrun_30ae05c7ddab400dadf9458dec5a96ae',
+      'Red Team - cc-general-operator - 2026-04-25'
+    )
+    // Sync from blob (picks up runs from other sessions/browsers)
+    syncRedTeamRunsFromBlob().then(() => fetchHistory())
   }, [])
 
-  // Re-fetch when filters / paging / sort / tab change
-  useEffect(() => {
-    fetchHistory()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tab, sortBy, page, dateFrom, dateTo])
+  const evalRuns = allRuns.filter(r => r.type !== 'red_team')
+  const redTeamRuns = allRuns.filter(r => r.type === 'red_team')
 
-  // Server already sorts + paginates; just use what the API returned.
-  const currentRuns = runs
-  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE))
+  // Apply date filter
+  const applyDateFilter = (runs: EvalRun[]) => {
+    if (!dateFrom && !dateTo) return runs
+    return runs.filter(r => {
+      if (!r.created_at) return false
+      const ts = r.created_at * 1000
+      if (dateFrom) {
+        const from = new Date(dateFrom)
+        from.setHours(0, 0, 0, 0)
+        if (ts < from.getTime()) return false
+      }
+      if (dateTo) {
+        const to = new Date(dateTo)
+        to.setHours(23, 59, 59, 999)
+        if (ts > to.getTime()) return false
+      }
+      return true
+    })
+  }
+
+  // Apply sorting
+  const applySorting = (runs: EvalRun[]) => {
+    return [...runs].sort((a, b) => {
+      if (sortBy === 'volume') {
+        const aTotal = a.result_counts?.total ?? 0
+        const bTotal = b.result_counts?.total ?? 0
+        if (bTotal !== aTotal) return bTotal - aTotal
+        // Tie-break by date
+        return (b.created_at || 0) - (a.created_at || 0)
+      }
+      return (b.created_at || 0) - (a.created_at || 0)
+    })
+  }
+
+  const baseRuns = tab === 'evaluations' ? evalRuns : redTeamRuns
+  const filteredRuns = applySorting(applyDateFilter(baseRuns))
+  const totalPages = Math.max(1, Math.ceil(filteredRuns.length / PAGE_SIZE))
   const safePage = Math.min(page, totalPages)
+  const currentRuns = filteredRuns.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE)
   const hasDateFilter = dateFrom || dateTo
 
   // Reset page when tab, sort, or filters change
@@ -227,7 +273,7 @@ export default function ResultsIndexPage() {
         >
           <DataBarVertical20Regular className="h-4 w-4" />
           Evaluations
-          {!loading && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-bg-secondary text-fg-subtle">{evalCount}</span>}
+          {!loading && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-bg-secondary text-fg-subtle">{evalRuns.length}</span>}
         </button>
         <button
           onClick={() => setTab('red-team')}
@@ -240,7 +286,7 @@ export default function ResultsIndexPage() {
         >
           <Shield20Regular className="h-4 w-4" />
           Red Teaming
-          {!loading && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-bg-secondary text-fg-subtle">{redTeamCount}</span>}
+          {!loading && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-bg-secondary text-fg-subtle">{redTeamRuns.length}</span>}
         </button>
       </div>
 
@@ -255,7 +301,7 @@ export default function ResultsIndexPage() {
               </h3>
               {!loading && (
                 <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-bg-secondary text-fg-subtle">
-                  {total}
+                  {filteredRuns.length}{hasDateFilter ? ` of ${baseRuns.length}` : ''}
                 </span>
               )}
             </div>
@@ -410,7 +456,7 @@ export default function ResultsIndexPage() {
             {totalPages > 1 && (
               <div className="flex items-center justify-between mt-4 pt-3 border-t border-stroke-divider">
                 <span className="text-[11px] text-fg-muted">
-                  Showing {(safePage - 1) * PAGE_SIZE + 1}–{Math.min(safePage * PAGE_SIZE, total)} of {total}
+                  Showing {(safePage - 1) * PAGE_SIZE + 1}–{Math.min(safePage * PAGE_SIZE, filteredRuns.length)} of {filteredRuns.length}
                 </span>
                 <div className="flex items-center gap-1">
                   <button

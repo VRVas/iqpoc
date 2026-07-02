@@ -16,6 +16,7 @@ import {
   DataBarVertical20Regular,
   Pulse20Regular,
   Wrench20Regular,
+  BotSparkle20Regular,
 } from '@fluentui/react-icons'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
@@ -39,6 +40,7 @@ const navigation: NavItem[] = [
   { href: '/knowledge-sources', label: 'Knowledge Sources', icon: DocumentBulletList20Regular },
   { href: '/tracing', label: 'Tracing', icon: Pulse20Regular, comingSoon: true },
   { href: '/evaluations', label: 'Evaluations', icon: DataBarVertical20Regular },
+  { href: '/byo-agent', label: 'BYO Agent', icon: BotSparkle20Regular, comingSoon: true },
 ]
 
 interface AppShellProps {
