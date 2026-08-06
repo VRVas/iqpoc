@@ -251,8 +251,18 @@ export async function createKnowledgeBase(knowledgeBaseData: Partial<KnowledgeBa
   })
 
   if (!response.ok) {
-    const errorData = await response.json()
-    throw new Error(errorData.error || 'Failed to create knowledge base')
+    const errorData = await response.json().catch(() => ({} as any))
+    // Prefer Azure's own explanation (e.g. "The following Knowledge Source does
+    // not support extractive output mode: ...") over our generic
+    // "Failed to create knowledge base (400)" wrapper, and the tenant-isolation
+    // `hint` when the name was rejected before it ever reached Azure.
+    const azureMessage =
+      errorData?.azureError?.error?.message ??
+      errorData?.azureError?.message ??
+      (typeof errorData?.azureError === 'string' ? errorData.azureError : undefined)
+    throw new Error(
+      azureMessage || errorData?.hint || errorData?.error || 'Failed to create knowledge base'
+    )
   }
 
   return response.json()

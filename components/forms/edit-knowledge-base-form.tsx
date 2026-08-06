@@ -15,7 +15,7 @@ import { useToast } from '@/components/ui/toast'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { createKnowledgeBaseSchema, CreateKnowledgeBaseFormData } from '@/lib/validations'
 import { getSourceKindLabel } from '@/lib/sourceKinds'
-import { MODEL_DEPLOYMENTS } from '@/lib/modelOptions'
+import { MODEL_DEPLOYMENTS, DEFAULT_MODEL_DEPLOYMENT } from '@/lib/modelOptions'
 
 interface KnowledgeSourceSummary {
   name: string
@@ -94,7 +94,7 @@ export function EditKnowledgeBaseForm({
       name: knowledgeBase.name,
       description: knowledgeBase.description || '',
       modelDeployment:
-        knowledgeBase.models?.[0]?.azureOpenAIParameters?.modelName || 'gpt-5',
+        knowledgeBase.models?.[0]?.azureOpenAIParameters?.modelName || DEFAULT_MODEL_DEPLOYMENT,
       sources: selectedSources,
       outputModality: outputModality as 'extractiveData' | 'answerSynthesis',
       answerInstructions,

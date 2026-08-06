@@ -15,7 +15,9 @@ import { createKnowledgeSource } from '@/lib/api'
 import { LoadingSkeleton } from '@/components/shared/loading-skeleton'
 import { useToast } from '@/components/ui/toast'
 import { cn } from '@/lib/utils'
-import { tenant } from '@/lib/tenant'
+import { tenant, validateOwnedName } from '@/lib/tenant'
+import { AZURE_RESOURCE_NAME_REGEX, AZURE_RESOURCE_NAME_MESSAGE } from '@/lib/validations'
+import { DEFAULT_MODEL_DEPLOYMENT } from '@/lib/modelOptions'
 
 type SourceType = 'indexedOneLake' | 'searchIndex' | 'azureBlob' | 'remoteSharePoint' | 'indexedSharePoint' | 'web'
 type BlobTab = 'upload' | 'existing'
@@ -29,6 +31,18 @@ const ALLOWED_EXTENSIONS = [
 const ACCEPT_STRING = ALLOWED_EXTENSIONS.join(',')
 const MAX_FILE_SIZE = 100 * 1024 * 1024
 const MAX_TOTAL_SIZE = 500 * 1024 * 1024
+
+/**
+ * Parse the free-text domain box into the address list Azure AI Search expects.
+ * Accepts newline, comma, semicolon or whitespace separated entries and strips
+ * the scheme plus any trailing slash, so pasting a browser URL just works.
+ */
+function parseDomains(text: string): string[] {
+  return text
+    .split(/[\n,;\s]+/)
+    .map(d => d.trim().replace(/^https?:\/\//i, '').replace(/\/+$/, ''))
+    .filter(Boolean)
+}
 
 interface QuickCreateConfig {
   sourceType: SourceType
@@ -47,7 +61,7 @@ const SOURCE_TYPE_INFO = {
     title: 'Azure Blob Storage',
     description: 'Upload documents or connect to existing files',
     requiredFields: ['containerName'],
-    defaultValues: { containerName: '', folderPath: '', embeddingModel: 'text-embedding-3-large', completionModel: 'gpt-5' }
+    defaultValues: { containerName: '', folderPath: '', embeddingModel: 'text-embedding-3-large', completionModel: DEFAULT_MODEL_DEPLOYMENT }
   },
   searchIndex: {
     icon: Database20Regular,
@@ -224,11 +238,17 @@ function QuickCreateKnowledgeSourcePageContent() {
   const [foldersLoading, setFoldersLoading] = useState(false)
   const [overwriteFiles, setOverwriteFiles] = useState<string[]>([])
   const [showOverwriteDialog, setShowOverwriteDialog] = useState(false)
+  // Raw text backing the domains textarea. Kept separate from `config.domains`
+  // so a trailing newline isn't swallowed while the user is still typing.
+  const [domainsText, setDomainsText] = useState('')
 
   useEffect(() => {
     if (selectedType) {
       const defaults = SOURCE_TYPE_INFO[selectedType]?.defaultValues || {}
       setConfig(prev => ({ ...prev, sourceType: selectedType, name: '', ...defaults }))
+      if (selectedType === 'web') {
+        setDomainsText((tenant.defaultWebDomains ?? []).join('\n'))
+      }
     }
   }, [selectedType])
 
@@ -263,8 +283,17 @@ function QuickCreateKnowledgeSourcePageContent() {
 
   const handleTypeSelect = (type: SourceType) => { setSelectedType(type); setStep('configure') }
 
+  // Azure AI Search rejects malformed names with an opaque 400, so catch it here.
+  // `validateOwnedName` is the same check the API route runs, so the message matches.
+  const sourceNameError = !config.name
+    ? ''
+    : config.name.length < 2 || !AZURE_RESOURCE_NAME_REGEX.test(config.name)
+      ? AZURE_RESOURCE_NAME_MESSAGE
+      : validateOwnedName(config.name, 'knowledgeSource').reason ?? ''
+
   const validateConfig = () => {
     if (!config.name) return false
+    if (sourceNameError) return false
     if (selectedType === 'azureBlob') {
       if (!config.containerName) return false
       if (blobTab === 'upload' && useDefaultStorage && files.length === 0) return false
@@ -344,7 +373,7 @@ function QuickCreateKnowledgeSourcePageContent() {
       toast({ title: 'Starting indexation pipeline...', description: config.name, type: 'info', duration: 0 })
       const ingestionParameters = {
         embeddingModel: { kind: 'azureOpenAI', azureOpenAIParameters: { deploymentId: 'text-embedding-3-large', modelName: 'text-embedding-3-large' } },
-        chatCompletionModel: { kind: 'azureOpenAI', azureOpenAIParameters: { deploymentId: 'gpt-5', modelName: 'gpt-5' } }
+        chatCompletionModel: { kind: 'azureOpenAI', azureOpenAIParameters: { deploymentId: DEFAULT_MODEL_DEPLOYMENT, modelName: DEFAULT_MODEL_DEPLOYMENT } }
       }
       let payload: any = { name: config.name, kind: config.sourceType, description: 'Created via Knowledge Source wizard' }
       if (config.sourceType === 'azureBlob') {
@@ -432,7 +461,15 @@ function QuickCreateKnowledgeSourcePageContent() {
             <Card className="p-6 space-y-5">
               <div>
                 <label className="text-sm font-medium text-fg-secondary">Name <span className="text-red-500">*</span></label>
-                <Input value={config.name} onChange={(e) => setConfig({ ...config, name: e.target.value })} placeholder="Knowledge source name" className="mt-1" />
+                <Input
+                  value={config.name}
+                  onChange={(e) => setConfig({ ...config, name: e.target.value })}
+                  placeholder={`e.g., ${tenant.knowledgeSourcePrefix ?? tenant.kbPrefix ?? ''}product-docs`}
+                  className={cn('mt-1', sourceNameError && 'border-red-500')}
+                />
+                {sourceNameError
+                  ? <p className="text-xs text-red-500 mt-1">{sourceNameError}</p>
+                  : <p className="text-xs text-fg-muted mt-1">Lowercase letters, digits and dashes only.</p>}
               </div>
 
               {selectedType === 'azureBlob' && (
@@ -522,18 +559,31 @@ function QuickCreateKnowledgeSourcePageContent() {
               {selectedType === 'web' && (
                 <div>
                   <label className="text-sm font-medium text-fg-secondary">Domains <span className="text-red-500">*</span></label>
-                  <textarea value={config.domains?.join('\n') || ''}
-                    onChange={(e) => setConfig({ ...config, domains: e.target.value.split('\n').filter(Boolean) })}
-                    placeholder={`Enter one domain per line (e.g. ${tenant.defaultWebDomains[0] ?? 'www.example.com'})`}
+                  <textarea value={domainsText}
+                    onChange={(e) => {
+                      setDomainsText(e.target.value)
+                      setConfig(prev => ({ ...prev, domains: parseDomains(e.target.value) }))
+                    }}
+                    placeholder={`${tenant.defaultWebDomains[0] ?? 'www.example.com'}\ncontoso.com/blog`}
                     className="mt-1 w-full p-3 border border-stroke-divider rounded-xl text-sm h-32 bg-bg-canvas text-fg-default focus:outline-none focus:ring-2 focus:ring-accent" />
-                  <p className="text-xs text-fg-muted mt-1">Domain names only (no https:// prefix).</p>
+                  <p className="text-xs text-fg-muted mt-1">
+                    One domain per line. Commas, semicolons and spaces also work as separators.
+                    Write the bare host — <code>www.example.com</code> or <code>example.com/docs</code>.
+                    A leading <code>https://</code> and any trailing <code>/</code> are removed automatically.
+                    Subpages are always included.
+                  </p>
+                  {(config.domains?.length ?? 0) > 0 && (
+                    <p className="text-xs text-fg-muted mt-1">
+                      {config.domains!.length} domain{config.domains!.length === 1 ? '' : 's'}: {config.domains!.join(', ')}
+                    </p>
+                  )}
                 </div>
               )}
 
               {selectedType !== 'searchIndex' && (
                 <div className="p-3 bg-bg-info-subtle border border-stroke-info rounded-lg">
                   <p className="text-xs text-fg-info">
-                    <strong>Smart defaults applied:</strong> We're using text-embedding-3-large for embeddings and gpt-5 for chat completion.
+                    <strong>Smart defaults applied:</strong> We&apos;re using text-embedding-3-large for embeddings and {DEFAULT_MODEL_DEPLOYMENT} for chat completion.
                     These can be customized later if needed.
                   </p>
                 </div>

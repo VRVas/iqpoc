@@ -18,7 +18,8 @@ import { createKnowledgeBase } from '@/lib/api'
 import { generateKbToolDefinition, setToolDefinition } from '@/lib/tool-definitions-store'
 import { createKnowledgeBaseSchema, CreateKnowledgeBaseFormData } from '@/lib/validations'
 import { getSourceKindLabel } from '@/lib/sourceKinds'
-import { MODEL_DEPLOYMENTS } from '@/lib/modelOptions'
+import { MODEL_DEPLOYMENTS, DEFAULT_MODEL_DEPLOYMENT } from '@/lib/modelOptions'
+import { tenant } from '@/lib/tenant'
 
 interface KnowledgeSourceSummary {
   id?: string
@@ -55,9 +56,9 @@ export function CreateKnowledgeBaseForm({
   const form = useForm<z.infer<typeof createKnowledgeBaseSchema>>({
     resolver: zodResolver(createKnowledgeBaseSchema),
     defaultValues: {
-      name: '',
+      name: tenant.kbPrefix,
       description: '',
-  modelDeployment: 'gpt-5', // default selection
+      modelDeployment: DEFAULT_MODEL_DEPLOYMENT,
       sources: [],
       outputModality: 'extractiveData',
       answerInstructions: '',
@@ -195,13 +196,14 @@ export function CreateKnowledgeBaseForm({
               <FormControl>
                 <Input
                   {...register('name')}
-                  placeholder="e.g., Product Support KB"
+                  placeholder={`e.g., ${tenant.kbPrefix}product-support`}
                   aria-invalid={errors.name ? 'true' : 'false'}
                   maxLength={64}
                 />
               </FormControl>
               <FormDescription>
-                A unique name for this knowledge base (max 64 characters).
+                Lowercase letters, digits and dashes only (max 64 characters)
+                {tenant.kbPrefix ? ` — must start with “${tenant.kbPrefix}”.` : '.'}
               </FormDescription>
               <FormMessage />
             </FormField>
@@ -241,7 +243,7 @@ export function CreateKnowledgeBaseForm({
               </div>
               <FormControl>
                 <Select
-                  value={watchedModel || 'gpt-4o-mini'}
+                  value={watchedModel || DEFAULT_MODEL_DEPLOYMENT}
                   onValueChange={(value) => {
                     setValue('modelDeployment', value)
                     trigger('modelDeployment')

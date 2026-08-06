@@ -1,12 +1,19 @@
 import * as z from 'zod'
 
 // Knowledge base creation validation schema aligned with Search 2025-11-01-preview.
+// Azure AI Search rejects anything outside this shape with an opaque 400:
+// "Agent name must only contain lowercase letters, digits or dashes, cannot
+// start or end with dashes, must be at least 2 characters..."
+export const AZURE_RESOURCE_NAME_REGEX = /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/
+export const AZURE_RESOURCE_NAME_MESSAGE =
+  'Use lowercase letters, digits and dashes only — no spaces, uppercase or underscores, and it cannot start or end with a dash'
+
 export const createKnowledgeBaseSchema = z.object({
   name: z
     .string()
-    .min(1, 'Knowledge base name is required')
+    .min(2, 'Knowledge base name must be at least 2 characters')
     .max(64, 'Knowledge base name must be 64 characters or less')
-    .regex(/^[a-zA-Z0-9\s\-_]+$/, 'Name can only contain letters, numbers, spaces, hyphens, and underscores'),
+    .regex(AZURE_RESOURCE_NAME_REGEX, AZURE_RESOURCE_NAME_MESSAGE),
   description: z
     .string()
     .min(1, 'Description is required — it becomes the tool definition used during agent evaluations')

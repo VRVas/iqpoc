@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { DEFAULT_MODEL_DEPLOYMENT } from '@/lib/modelOptions'
 
 /**
  * POST /api/foundry/generate-starters
@@ -13,7 +14,7 @@ import { NextResponse } from 'next/server'
 const ENDPOINT = 'https://aikb-foundry-q36gpyt3maa7w.cognitiveservices.azure.com'
 const API_KEY = process.env.AZURE_OPENAI_API_KEY
 const API_VERSION = '2024-04-01-preview'
-const DEFAULT_DEPLOYMENT = 'gpt-4.1'
+const DEFAULT_DEPLOYMENT = DEFAULT_MODEL_DEPLOYMENT
 
 export async function POST(request: Request) {
   try {

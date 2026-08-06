@@ -30,6 +30,7 @@ import { fetchKnowledgeBases, fetchKnowledgeSources, createFoundryAgentV2, creat
 import { LoadingSkeleton } from '@/components/shared/loading-skeleton'
 import { AgentCodeModal } from '@/components/agent-code-modal'
 import { cn } from '@/lib/utils'
+import { MODEL_DEPLOYMENTS, DEFAULT_MODEL_DEPLOYMENT } from '@/lib/modelOptions'
 import { InlineCitationsText, SourcesCountButton } from '@/components/inline-citations'
 import { EvalScoreBubble } from '@/components/eval-score-bubble'
 import { MarkdownMessage } from '@/components/markdown-message'
@@ -90,7 +91,7 @@ function AgentBuilderPageContent() {
   // Agent configuration
   const [agentName, setAgentName] = useState(`agent-${Date.now()}`)
   const [agentInstructions, setAgentInstructions] = useState('You are a helpful AI assistant. Answer questions clearly and accurately based on the available knowledge sources.')
-  const [selectedModel, setSelectedModel] = useState('gpt-4.1')
+  const [selectedModel, setSelectedModel] = useState(DEFAULT_MODEL_DEPLOYMENT)
   const [knowledgeBases, setKnowledgeBases] = useState<KnowledgeBase[]>([])
   const [knowledgeSourcesMap, setKnowledgeSourcesMap] = useState<Map<string, KnowledgeSource>>(new Map())
   const [selectedKnowledgeBases, setSelectedKnowledgeBases] = useState<Set<string>>(new Set())
@@ -1069,10 +1070,11 @@ function AgentBuilderPageContent() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="gpt-4.1">GPT-4.1 (Recommended)</SelectItem>
-                  <SelectItem value="gpt-4.1-mini">GPT-4.1 Mini</SelectItem>
-                  <SelectItem value="gpt-4o-mini">GPT-4o Mini</SelectItem>
-                  <SelectItem value="gpt-5">GPT-5 (Code Interpreter &amp; File Search only)</SelectItem>
+                  {MODEL_DEPLOYMENTS.map(m => (
+                    <SelectItem key={m.value} value={m.value}>
+                      {m.label}{m.description ? ` — ${m.description}` : ''}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>

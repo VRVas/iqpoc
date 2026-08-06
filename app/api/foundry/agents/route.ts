@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { agentsV2Url, foundryHeaders, ensureMcpConnection, buildMcpTool } from '../helpers'
 import { getServerTenant, isOwnedAgent } from '@/lib/tenant'
+import { DEFAULT_MODEL_DEPLOYMENT } from '@/lib/modelOptions'
 
 /**
  * POST /api/foundry/agents
@@ -77,7 +78,7 @@ export async function POST(request: Request) {
       name: body.name,
       definition: {
         kind: 'prompt',
-        model: body.model || 'gpt-4.1',
+        model: body.model || DEFAULT_MODEL_DEPLOYMENT,
         instructions: body.instructions || 'You are a helpful AI assistant.',
         tools: tools.length > 0 ? tools : undefined,
       },

@@ -1,9 +1,6 @@
 import * as React from 'react'
-import { Open20Regular } from '@fluentui/react-icons'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
 import { formatRelativeTime } from '@/lib/utils'
-import Link from 'next/link'
 import { SourceKindIcon } from '@/components/source-kind-icon'
 import { KnowledgeSourceStatusIndicator } from '@/components/knowledge-source-status'
 
@@ -51,13 +48,6 @@ export function KnowledgeSourceCard({ source }: KnowledgeSourceCardProps) {
               </div>
             </div>
           </div>
-          
-          <Button variant="ghost" size="icon" asChild>
-            <Link href={`/knowledge-sources/${source.name}`}>
-              <Open20Regular className="h-4 w-4" />
-              <span className="sr-only">View source details</span>
-            </Link>
-          </Button>
         </div>
       </CardHeader>
       

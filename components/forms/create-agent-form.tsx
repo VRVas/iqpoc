@@ -9,6 +9,7 @@ import { Tooltip } from '@/components/ui/tooltip'
 import { Info20Regular, ChevronDown20Regular, ChevronUp20Regular } from '@fluentui/react-icons'
 // import { createAgent } from '@/lib/api' // Deprecated - agent functionality moved to Foundry
 import { getSourceKindLabel } from '@/lib/sourceKinds'
+import { MODEL_DEPLOYMENTS, DEFAULT_MODEL_DEPLOYMENT } from '@/lib/modelOptions'
 
 // Form validation schema based on Azure AI Search 2025-11-01-Preview API
 const createAgentSchema = z.object({
@@ -67,7 +68,7 @@ export function CreateAgentForm({
     defaultValues: {
       name: '',
       description: '',
-      model: 'gpt-5', // Using supported model name
+      model: DEFAULT_MODEL_DEPLOYMENT,
       sources: [],
       outputModality: 'extractiveData' as const,
       answerInstructions: '',
@@ -244,7 +245,7 @@ export function CreateAgentForm({
               </div>
               <FormControl>
                 <Select
-                  value={watchedModel || "gpt-4o-mini"}
+                  value={watchedModel || DEFAULT_MODEL_DEPLOYMENT}
                   onValueChange={(value) => {
                     setValue('model', value)
                     trigger('model')
@@ -254,54 +255,14 @@ export function CreateAgentForm({
                     <SelectValue placeholder="Select a model" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="gpt-4o-mini">
-                      <div>
-                        <div className="font-medium">GPT-4o Mini</div>
-                        <div className="text-xs text-fg-muted">Fast, cost-effective, recommended</div>
-                      </div>
-                    </SelectItem>
-                    <SelectItem value="gpt-4o">
-                      <div>
-                        <div className="font-medium">GPT-4o</div>
-                        <div className="text-xs text-fg-muted">Highest quality responses</div>
-                      </div>
-                    </SelectItem>
-                    <SelectItem value="gpt-4.1-nano">
-                      <div>
-                        <div className="font-medium">GPT-4.1 Nano</div>
-                        <div className="text-xs text-fg-muted">Ultra-fast, minimal cost</div>
-                      </div>
-                    </SelectItem>
-                    <SelectItem value="gpt-4.1-mini">
-                      <div>
-                        <div className="font-medium">GPT-4.1 Mini</div>
-                        <div className="text-xs text-fg-muted">Fast and efficient</div>
-                      </div>
-                    </SelectItem>
-                    <SelectItem value="gpt-4.1">
-                      <div>
-                        <div className="font-medium">GPT-4.1</div>
-                        <div className="text-xs text-fg-muted">High performance</div>
-                      </div>
-                    </SelectItem>
-                    <SelectItem value="gpt-5-nano">
-                      <div>
-                        <div className="font-medium">GPT-5 Nano</div>
-                        <div className="text-xs text-fg-muted">Latest nano model</div>
-                      </div>
-                    </SelectItem>
-                    <SelectItem value="gpt-5-mini">
-                      <div>
-                        <div className="font-medium">GPT-5 Mini</div>
-                        <div className="text-xs text-fg-muted">Latest mini model</div>
-                      </div>
-                    </SelectItem>
-                    <SelectItem value="gpt-5">
-                      <div>
-                        <div className="font-medium">GPT-5</div>
-                        <div className="text-xs text-fg-muted">Latest flagship model</div>
-                      </div>
-                    </SelectItem>
+                    {MODEL_DEPLOYMENTS.map(m => (
+                      <SelectItem key={m.value} value={m.value}>
+                        <div>
+                          <div className="font-medium">{m.label}</div>
+                          {m.description && <div className="text-xs text-fg-muted">{m.description}</div>}
+                        </div>
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </FormControl>
